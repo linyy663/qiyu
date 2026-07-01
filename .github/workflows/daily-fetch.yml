@@ -42,17 +42,4 @@ jobs:
             git commit -m "📊 自动抓取 $(TZ='Asia/Shanghai' date +'%Y-%m-%d') 数据"
             git push
           fi
-
-      - name: 触发 Pages 部署
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              await github.rest.repos.requestPagesBuild({
-                owner: context.repo.owner,
-                repo: context.repo.repo
-              });
-              console.log('✅ Pages 重建已触发');
-            } catch(e) {
-              console.log('⚠️ Pages 触发失败（首次需手动启用）:', e.message);
-            }
+          echo "✅ 数据已推送，Cloudflare Pages 将自动检测变更并重新部署"
