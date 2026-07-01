@@ -1,6 +1,6 @@
 """
 GitHub Actions 数据抓取脚本
-每日凌晨 2:00 自动运行，调用七鱼 API 获取统计数据并生成静态 JSON 文件
+每小时运行一次，抓取统计数据；凌晨2点额外执行会话导出（ZIP 异步流程）
 """
 import json
 import os
@@ -8,6 +8,8 @@ import sys
 import time
 import hashlib
 import datetime
+import zipfile
+import io
 import requests
 
 # ==================== 配置（从 GitHub Secrets 环境变量读取） ====================
@@ -73,8 +75,21 @@ class QiyuAPI:
     def get_staff_attendance(self, start_time, end_time):
         return self._post('/openapi/statistic/staffAttendance', {"startTime": start_time, "endTime": end_time})
 
-    def export_sessions(self, start_ms, end_ms):
+    def submit_session_export(self, start_ms, end_ms):
+        """提交批量导出任务，返回 task key"""
         return self._post('/openapi/export/session', {"start": str(start_ms), "end": str(end_ms)})
+
+    def check_session_export(self, key):
+        """检查导出任务状态，成功后返回下载链接"""
+        return self._post('/openapi/export/session/check', {"key": key})
+
+    def get_session_detail(self, session_id):
+        """获取单条会话详情"""
+        return self._post('/openapi/export/session/one', {"sessionId": session_id})
+
+    def get_session_messages(self, session_id):
+        """获取单条会话消息"""
+        return self._post('/openapi/export/session/one/message', {"sessionId": session_id})
 
 
 # ==================== 时间工具 ====================
@@ -267,7 +282,7 @@ def generate_report_insights(overall, agent_evals):
 
     avg_resp = float(overall.get('avgRespTime', 0)) / 1000
     if avg_resp > 60:
-        findings.append(f'平均响应时间较长（{avg_resp}秒），需关注响应效率')
+        findings.append(f'平均响应时间较长（{avg_resp:.0f}秒），需关注响应效率')
 
     grades_count = {}
     for ev in agent_evals:
@@ -288,6 +303,112 @@ def generate_report_insights(overall, agent_evals):
         recommendations.append(f'对{bad_count}名表现较差的坐席进行一对一辅导和培训')
 
     return findings, recommendations, score_summary
+
+
+# ==================== 会话导出（异步 ZIP 流程） ====================
+
+def export_sessions_async(date_str, max_wait=180):
+    """
+    完整的异步会话导出流程：
+    1. 提交任务 → 获取 key
+    2. 轮询 /check → 获取下载链接
+    3. 下载 ZIP，解压（密码是 appkey 前12位）
+    4. 解析 txt 文件，返回会话列表
+    """
+    start_ms, end_ms, _ = get_timestamp_range(date_str)
+    api = QiyuAPI()
+
+    print(f"  [SESSION] Submitting export task for {date_str}...")
+    submit_result = api.submit_session_export(start_ms, end_ms)
+
+    if submit_result.get('code') != 200:
+        print(f"  [SESSION] Submit failed: code={submit_result.get('code')}, msg={submit_result.get('message')}")
+        return None
+
+    task_key = submit_result.get('message')
+    if not task_key or not isinstance(task_key, (int, str)):
+        print(f"  [SESSION] Invalid task key: {task_key}")
+        return None
+
+    print(f"  [SESSION] Task submitted, key={task_key}. Polling for completion...")
+
+    # 轮询最多 max_wait 秒
+    poll_interval = 10
+    waited = 0
+    download_url = None
+
+    while waited < max_wait:
+        time.sleep(poll_interval)
+        waited += poll_interval
+
+        check_result = api.check_session_export(task_key)
+        code = check_result.get('code')
+        msg = check_result.get('message')
+
+        print(f"  [SESSION] Poll ({waited}s): code={code}, msg={str(msg)[:100]}")
+
+        if code == 200:
+            # 成功，message 是下载 URL
+            download_url = msg
+            break
+        elif code == 14403:
+            # 还在等待，继续轮询
+            continue
+        else:
+            print(f"  [SESSION] Poll failed: code={code}, msg={msg}")
+            return None
+
+    if not download_url:
+        print(f"  [SESSION] Timed out after {max_wait}s")
+        return None
+
+    print(f"  [SESSION] Download URL obtained: {str(download_url)[:80]}...")
+
+    # 下载 ZIP 文件
+    try:
+        resp = requests.get(download_url, timeout=60)
+        resp.raise_for_status()
+        zip_bytes = resp.content
+        print(f"  [SESSION] Downloaded {len(zip_bytes)} bytes")
+    except Exception as e:
+        print(f"  [SESSION] Download failed: {e}")
+        return None
+
+    # 解压 ZIP（密码是 appkey 前12个字符）
+    zip_password = APP_KEY[:12].encode('utf-8')
+    sessions = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            for name in zf.namelist():
+                print(f"  [SESSION] Extracting file: {name}")
+                try:
+                    content = zf.read(name, pwd=zip_password).decode('utf-8')
+                except Exception:
+                    content = zf.read(name).decode('utf-8')
+
+                # 解析 txt 文件（JSON Lines 格式，每行一条会话）
+                for line in content.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        if isinstance(obj, dict):
+                            sessions.append(obj)
+                        elif isinstance(obj, list):
+                            sessions.extend(obj)
+                    except json.JSONDecodeError:
+                        pass
+
+        print(f"  [SESSION] Parsed {len(sessions)} sessions")
+        return sessions
+
+    except zipfile.BadZipFile as e:
+        print(f"  [SESSION] Bad ZIP file: {e}")
+        return None
+    except Exception as e:
+        print(f"  [SESSION] Extraction failed: {e}")
+        return None
 
 
 # ==================== 主抓取逻辑 ====================
@@ -600,25 +721,6 @@ def fetch_data_for_date(date_str, days=None):
     return result
 
 
-def try_session_export(date_str):
-    """尝试导出会话数据（仅凌晨可调用，企业需开通权限）"""
-    start_ms, end_ms, _ = get_timestamp_range(date_str)
-    api = QiyuAPI()
-    result = api.export_sessions(start_ms, end_ms)
-    if result.get('code') == 200:
-        sessions = result.get('data', result.get('message', []))
-        if isinstance(sessions, dict):
-            for k in ['result', 'list', 'items', 'data']:
-                if k in sessions and isinstance(sessions[k], list):
-                    sessions = sessions[k]
-                    break
-            else:
-                sessions = []
-        if isinstance(sessions, list):
-            return sessions
-    return None
-
-
 # ==================== 入口 ====================
 
 def main():
@@ -629,15 +731,15 @@ def main():
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # 抓取前一天的日数据
-    yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-    today = datetime.datetime.now().strftime('%Y-%m-%d')
+    china_tz = datetime.timezone(datetime.timedelta(hours=8))
+    now_cn = datetime.datetime.now(china_tz)
+    yesterday = (now_cn - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+    today = now_cn.strftime('%Y-%m-%d')
 
-    # 日数据
+    # 日数据（昨天）
     daily_data = fetch_data_for_date(yesterday)
     if daily_data:
-        filename = f"{yesterday}.json"
-        filepath = os.path.join(OUTPUT_DIR, filename)
+        filepath = os.path.join(OUTPUT_DIR, f"{yesterday}.json")
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(daily_data, f, ensure_ascii=False)
         print(f"\n  Saved: {filepath}")
@@ -645,66 +747,79 @@ def main():
     # 近一周数据
     week_data = fetch_data_for_date(yesterday, days=7)
     if week_data:
-        filename = f"{yesterday}-week.json"
-        filepath = os.path.join(OUTPUT_DIR, filename)
+        filepath = os.path.join(OUTPUT_DIR, f"{yesterday}-week.json")
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(week_data, f, ensure_ascii=False)
         print(f"  Saved: {filepath}")
 
-    # 近一月数据
-    month_data = fetch_data_for_date(yesterday, days=30)
-    if month_data:
-        filename = f"{yesterday}-month.json"
-        filepath = os.path.join(OUTPUT_DIR, filename)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(month_data, f, ensure_ascii=False)
-        print(f"  Saved: {filepath}")
+    # 近一月数据（仅每天凌晨运行以节省API调用）
+    if now_cn.hour == 2:
+        month_data = fetch_data_for_date(yesterday, days=30)
+        if month_data:
+            filepath = os.path.join(OUTPUT_DIR, f"{yesterday}-month.json")
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(month_data, f, ensure_ascii=False)
+            print(f"  Saved: {filepath}")
 
     # 今天数据（实时截断到当前时刻）
     today_data = fetch_data_for_date(today)
     if today_data:
-        filename = f"{today}.json"
-        filepath = os.path.join(OUTPUT_DIR, filename)
+        filepath = os.path.join(OUTPUT_DIR, f"{today}.json")
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(today_data, f, ensure_ascii=False)
         print(f"  Saved: {filepath}")
 
     # 写入 latest.json 索引
     latest = {
-        "updatedAt": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        "updatedAt": now_cn.strftime('%Y-%m-%d %H:%M:%S'),
+        "timezone": "Asia/Shanghai",
         "dates": [],
-        "sessionExportAvailable": False
+        "sessionExportAvailable": False,
+        "sessionDates": []
     }
 
     # 列出所有已生成的数据文件
     for fname in sorted(os.listdir(OUTPUT_DIR)):
-        if fname.endswith('.json') and not fname.startswith('latest') and '-week' not in fname:
+        if fname.endswith('.json') and not fname.startswith('latest') and '-week' not in fname and '-month' not in fname and not fname.startswith('sessions-'):
             latest["dates"].append(fname.replace('.json', ''))
+        elif fname.startswith('sessions-') and fname.endswith('.json'):
+            date_part = fname.replace('sessions-', '').replace('.json', '')
+            latest["sessionDates"].append(date_part)
+            latest["sessionExportAvailable"] = True
 
     latest["dates"].sort(reverse=True)
+    latest["sessionDates"].sort(reverse=True)
 
     with open(os.path.join(OUTPUT_DIR, 'latest.json'), 'w', encoding='utf-8') as f:
         json.dump(latest, f, ensure_ascii=False)
 
-    # 尝试会话导出（凌晨时段）
-    now = datetime.datetime.now()
-    if 2 <= now.hour < 6:
-        print(f"\n  [SESSION] In export window (2-6 AM), attempting session export for {yesterday}...")
-        sessions = try_session_export(yesterday)
+    # 凌晨 2 点运行会话导出（完整异步 ZIP 流程）
+    if now_cn.hour == 2:
+        print(f"\n  [SESSION] 凌晨时段，执行会话导出 for {yesterday}...")
+        sessions = export_sessions_async(yesterday, max_wait=180)
         if sessions:
-            with open(os.path.join(OUTPUT_DIR, f"sessions-{yesterday}.json"), 'w', encoding='utf-8') as f:
-                json.dump({"date": yesterday, "sessions": sessions, "total": len(sessions)}, f, ensure_ascii=False)
-            print(f"  [SESSION] Cached {len(sessions)} sessions")
+            filepath = os.path.join(OUTPUT_DIR, f"sessions-{yesterday}.json")
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump({
+                    "date": yesterday,
+                    "generatedAt": now_cn.strftime('%Y-%m-%d %H:%M:%S'),
+                    "sessions": sessions,
+                    "total": len(sessions)
+                }, f, ensure_ascii=False)
+            print(f"  [SESSION] Cached {len(sessions)} sessions → {filepath}")
             latest["sessionExportAvailable"] = True
+            latest["sessionDates"].append(yesterday)
+            latest["sessionDates"] = sorted(list(set(latest["sessionDates"])), reverse=True)
             with open(os.path.join(OUTPUT_DIR, 'latest.json'), 'w', encoding='utf-8') as f:
                 json.dump(latest, f, ensure_ascii=False)
         else:
-            print(f"  [SESSION] Export failed (API may not be available for this enterprise)")
+            print(f"  [SESSION] Export failed or no data")
     else:
-        print(f"\n  [SESSION] Outside export window (2-6 AM), skipping session export")
+        print(f"\n  [SESSION] 非凌晨时段（当前 {now_cn.hour} 时），跳过会话导出")
 
     print(f"\n{'='*60}")
     print(f"  DONE! {len(latest['dates'])} dates cached in data/")
+    print(f"  Session data: {len(latest.get('sessionDates', []))} dates available")
     print(f"{'='*60}")
 
 

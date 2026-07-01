@@ -301,7 +301,7 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
   </div>
 
   <!-- ============ About ============ -->
-  <div class="page" id="page-about" style="display:none">
+  <div class="page" id="page-about">
     <div class="section">
       <div class="section-header"><h3>ℹ️ 关于本站</h3></div>
       <div class="section-body">
@@ -673,20 +673,29 @@ async function loadAllData() {
     currentData = await loadDateData(currentDate, currentRange);
   }
   if (!currentData) {
-    var emptyHtml = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3><p>该日期/区间的数据尚未生成，请等待凌晨自动抓取或选择其他日期</p></div>';
+    var emptyHtml = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3><p>该日期/区间的数据尚未生成，请等待自动抓取或选择其他日期</p></div>';
     var page = document.querySelector('.nav-item.active');
     if (page) {
       var pid = 'page-' + page.dataset.page;
-      document.getElementById(pid).querySelector('.page').style.display = 'block';
+      var pageEl = document.getElementById(pid);
+      if (pageEl) pageEl.style.display = 'block';
       if (page.dataset.page === 'dashboard') {
-        document.getElementById('dashboard-content').style.display = 'block';
+        var dc = document.getElementById('dashboard-content');
+        if (dc) dc.style.display = 'block';
         document.getElementById('overview-cards').innerHTML = emptyHtml;
       } else if (page.dataset.page === 'agents') {
-        document.getElementById('agents-content').style.display = 'block';
+        var ac = document.getElementById('agents-content');
+        if (ac) ac.style.display = 'block';
         document.getElementById('agents-summary-cards').innerHTML = emptyHtml;
       } else if (page.dataset.page === 'report') {
-        document.getElementById('report-content').style.display = 'block';
+        var rc = document.getElementById('report-content');
+        if (rc) rc.style.display = 'block';
         document.getElementById('report-overview-cards').innerHTML = emptyHtml;
+      } else if (page.dataset.page === 'sessions') {
+        var sc = document.getElementById('sessions-content');
+        if (sc) sc.style.display = 'block';
+        document.getElementById('sessions-list-section').style.display = 'block';
+        document.querySelector('#sessions-table tbody').innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px">' + emptyHtml + '</td></tr>';
       }
     }
     showToast('该日期/区间暂无数据', 'warning');
