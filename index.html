@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>七鱼客服统计 - 每日数据看板</title>
+<title>七鱼客服数据看板</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root {
@@ -27,17 +27,16 @@ body {
 .header-left { display: flex; align-items: center; gap: 12px; }
 .header-logo { width: 36px; height: 36px; background: rgba(255,255,255,0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
 .header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
-.header-right { display: flex; align-items: center; gap: 12px; }
-.header-badge { background: rgba(255,255,255,0.15); padding: 4px 12px; border-radius: 20px; font-size: 13px; }
-.date-selector { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 14px; cursor: pointer; }
-.date-selector:focus { outline: none; border-color: rgba(255,255,255,0.5); }
-
-.btn-range {
-  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
-  color: #fff; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s;
-}
-.btn-range:hover { background: rgba(255,255,255,0.2); }
-.btn-range.active { background: var(--primary); border-color: var(--primary); }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.header-badge { background: rgba(255,255,255,0.15); padding: 4px 12px; border-radius: 20px; font-size: 13px; white-space: nowrap; }
+.header select { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+.header select:focus { outline: none; border-color: rgba(255,255,255,0.5); }
+.header select option { color: #333; background: #fff; }
+.header input[type="date"] { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 5px 8px; border-radius: 6px; font-size: 12px; }
+.header input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+.custom-range-wrap { display: none; align-items: center; gap: 4px; }
+.custom-range-wrap.show { display: flex; }
+.custom-range-wrap span { font-size: 12px; opacity: 0.8; }
 
 .nav {
   background: var(--card-bg); border-bottom: 1px solid var(--border); padding: 0 32px;
@@ -82,6 +81,18 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
 .grade-poor { background: #fee2e2; color: #991b1b; }
 .grade-bad { background: #fecaca; color: #7f1d1d; }
 
+.btn { padding: 8px 18px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; background: var(--card-bg); color: var(--text); }
+.btn:hover { box-shadow: var(--shadow); }
+.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary:hover { opacity: 0.9; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-text { background: none; border: none; color: var(--primary); padding: 4px 8px; cursor: pointer; font-size: 12px; }
+.btn-text:hover { text-decoration: underline; }
+
+.form-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.form-group label { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.form-group select, .form-group input { padding: 7px 12px; border-radius: 6px; border: 1px solid var(--border); font-size: 13px; }
+
 .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 768px) { .report-grid { grid-template-columns: 1fr; } }
 .report-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
@@ -101,7 +112,7 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
 .empty-state p { font-size: 14px; max-width: 500px; margin: 0 auto 12px; }
 
 .toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 8px; color: #fff; font-size: 14px; z-index: 2000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: fadeInOut 3s ease forwards; }
-@keyframes fadeInOut { 0% { opacity: 0; transform: translateX(-50%) translateY(-10px); } 10% { opacity: 1; transform: translateX(-50%) translateY(0); } 90% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes fadeInOut { 0% { opacity:0; transform:translateX(-50%) translateY(-10px); } 10% { opacity:1; transform:translateX(-50%) translateY(0); } 90% { opacity:1; } 100% { opacity:0; } }
 
 .feature-item { font-size: 13px; color: var(--text-secondary); margin: 4px 0; padding-left: 16px; position: relative; }
 .feature-item::before { content: ''; position: absolute; left: 4px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--info); }
@@ -111,10 +122,26 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
 .banner-warn { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; }
 .banner-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
 
+/* Modal */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 3000; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: var(--card-bg); border-radius: var(--radius); width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+.modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--card-bg); z-index: 1; }
+.modal-header h3 { font-size: 16px; }
+.modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-secondary); padding: 4px 8px; }
+.modal-body { padding: 20px; }
+.msg-row { padding: 8px 12px; border-radius: 6px; margin: 4px 0; font-size: 13px; max-width: 85%; }
+.msg-row.staff { background: var(--primary-light); margin-left: auto; color: var(--primary); }
+.msg-row.user { background: #f3f4f6; }
+.msg-row.system { background: #fef3c7; color: #92400e; text-align: center; margin: 8px auto; max-width: 100%; font-size: 12px; }
+.msg-meta { font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; }
+
+.session-summary { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 12px 16px; margin: 12px 0; font-size: 13px; color: #0369a1; }
+
 @media (max-width: 768px) {
-  .header { padding: 0 16px; }
+  .header { padding: 0 12px; flex-wrap: wrap; height: auto; padding-top: 8px; padding-bottom: 8px; }
   .nav { padding: 0 12px; overflow-x: auto; }
-  .main { padding: 16px; }
+  .main { padding: 12px; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 </style>
@@ -129,8 +156,18 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
   </div>
   <div class="header-right">
     <span class="header-badge" id="updateBadge">🕐 加载中...</span>
-    <select class="date-selector" id="datePicker" title="选择统计日期"></select>
-    <button class="btn-range" id="btnRange" onclick="toggleRange()">📅 单日</button>
+    <select id="rangeType" title="统计周期">
+      <option value="day">📅 单日</option>
+      <option value="week">📊 近一周</option>
+      <option value="month">📈 近一月</option>
+      <option value="custom">🔄 自定义区间</option>
+    </select>
+    <div class="custom-range-wrap" id="customRange">
+      <input type="date" id="customStart" title="开始日期">
+      <span>至</span>
+      <input type="date" id="customEnd" title="结束日期">
+    </div>
+    <select id="datePicker" title="基准日期"></select>
   </div>
 </div>
 
@@ -139,13 +176,14 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
   <div class="nav-item active" data-page="dashboard">📊 数据总览</div>
   <div class="nav-item" data-page="agents">👥 坐席绩效</div>
   <div class="nav-item" data-page="report">📋 质量报告</div>
+  <div class="nav-item" data-page="sessions">💬 客服会话查看</div>
   <div class="nav-item" data-page="about">ℹ️ 关于</div>
 </div>
 
 <!-- Main Content -->
 <div class="main">
 
-  <!-- Dashboard Page -->
+  <!-- ============ Dashboard ============ -->
   <div class="page active" id="page-dashboard">
     <div class="loading" id="dashboard-loading"><div class="spinner"></div><div>正在加载数据...</div></div>
     <div id="dashboard-content" style="display:none">
@@ -157,7 +195,7 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
     </div>
   </div>
 
-  <!-- Agents Page -->
+  <!-- ============ Agents ============ -->
   <div class="page" id="page-agents">
     <div class="loading" id="agents-loading"><div class="spinner"></div><div>正在加载数据...</div></div>
     <div id="agents-content" style="display:none">
@@ -182,7 +220,7 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
     </div>
   </div>
 
-  <!-- Report Page -->
+  <!-- ============ Report ============ -->
   <div class="page" id="page-report">
     <div class="loading" id="report-loading"><div class="spinner"></div><div>正在生成报告...</div></div>
     <div id="report-content" style="display:none">
@@ -208,27 +246,81 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
     </div>
   </div>
 
-  <!-- About Page -->
-  <div class="page active" id="page-about" style="display:none">
+  <!-- ============ Sessions ============ -->
+  <div class="page" id="page-sessions">
+    <div class="loading" id="sessions-loading"><div class="spinner"></div><div>正在加载数据...</div></div>
+    <div id="sessions-content" style="display:none">
+      <div id="session-perm-warn" class="banner-bar banner-warn" style="display:none">
+        <strong>⚠️ 会话导出功能受限</strong><br>
+        当前企业账号暂未开通七鱼「会话导出」API 权限。请联系七鱼客服开通后，每日凌晨 2:00-6:00 自动抓取会话数据缓存。<br>
+        如需立即查看，可登录<a href="https://qiyukf.com" target="_blank">七鱼管理后台</a>查看会话记录。
+      </div>
+      <div class="section">
+        <div class="section-header"><h3>💬 查询会话</h3></div>
+        <div class="section-body">
+          <div class="form-group" style="margin-bottom:16px">
+            <label>选择坐席</label>
+            <select id="session-agent-select" style="min-width:160px">
+              <option value="">-- 全部坐席 --</option>
+            </select>
+            <label style="margin-left:12px">日期范围</label>
+            <input type="date" id="session-date-start" style="width:140px">
+            <span>至</span>
+            <input type="date" id="session-date-end" style="width:140px">
+            <button class="btn btn-primary" onclick="loadSessionData()">查询会话</button>
+          </div>
+          <div class="form-group">
+            <label>或直接输入会话ID：</label>
+            <input type="number" id="session-id-input" placeholder="输入会话ID" style="width:200px">
+            <button class="btn btn-primary" onclick="loadSessionById()">查看详情</button>
+          </div>
+        </div>
+      </div>
+      <div class="section" id="sessions-list-section" style="display:none">
+        <div class="section-header">
+          <h3>会话列表</h3>
+          <span style="font-size:13px;color:var(--text-secondary)" id="sessions-count"></span>
+        </div>
+        <div class="section-body">
+          <div class="table-wrap">
+            <table id="sessions-table">
+              <thead>
+                <tr><th>会话ID</th><th>访客ID</th><th>坐席</th><th>开始时间</th><th>结束时间</th>
+                    <th>类型</th><th>分类</th><th>评价</th><th>消息数</th><th>状态</th><th>操作</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="section" id="session-summary-section" style="display:none">
+        <div class="section-header"><h3>📝 AI 会话概括</h3></div>
+        <div class="section-body" id="session-summary-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ About ============ -->
+  <div class="page" id="page-about" style="display:none">
     <div class="section">
       <div class="section-header"><h3>ℹ️ 关于本站</h3></div>
       <div class="section-body">
         <div class="banner-bar banner-info" style="margin-bottom:20px">
           <strong>🔧 工作原理</strong><br>
-          本站数据由 GitHub Actions 在每天凌晨 2:00（北京时间）自动调用七鱼开放平台 API 抓取，生成静态 JSON 文件后通过 Cloudflare Pages 提供服务。GitHub 仓库保持私有。
+          本站数据由 GitHub Actions 在每天凌晨 2:00（北京时间）自动调用七鱼开放平台 API 抓取，生成静态 JSON 文件后通过 GitHub Pages 提供服务。
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
           <div style="background:#f8fafc;padding:16px;border-radius:8px">
             <h4 style="margin-bottom:8px">📅 数据更新</h4>
-            <p style="font-size:13px;color:var(--text-secondary)">每日凌晨 2:05（北京时间）自动抓取前一天和当天的统计数据。手动触发更新请前往 GitHub 仓库的 Actions 页面。</p>
+            <p style="font-size:13px;color:var(--text-secondary)">每日凌晨 2:05（北京时间）自动抓取单日、近一周、近一月三个维度的统计数据和会话记录。</p>
           </div>
           <div style="background:#f8fafc;padding:16px;border-radius:8px">
-            <h4 style="margin-bottom:8px">💬 会话分析</h4>
-            <p style="font-size:13px;color:var(--text-secondary)">批量会话导出需要企业开通七鱼「会话导出」API 权限。如需查看具体会话内容，请在七鱼管理后台查看。</p>
+            <h4 style="margin-bottom:8px">💬 会话查看</h4>
+            <p style="font-size:13px;color:var(--text-secondary)">会话数据需要企业开通七鱼「会话导出」API 权限。开通后，系统将在每日凌晨自动缓存会话数据。</p>
           </div>
           <div style="background:#f8fafc;padding:16px;border-radius:8px">
             <h4 style="margin-bottom:8px">📊 数据范围</h4>
-            <p style="font-size:13px;color:var(--text-secondary)">本站展示的数据总览、坐席绩效、质量报告均来源于七鱼开放平台统计类 API。数据延迟约 1 天。</p>
+            <p style="font-size:13px;color:var(--text-secondary)">数据总览、坐席绩效、质量报告均来源于七鱼开放平台统计类 API。数据延迟约 1 天。</p>
           </div>
           <div style="background:#f8fafc;padding:16px;border-radius:8px">
             <h4 style="margin-bottom:8px">🔐 安全性</h4>
@@ -241,25 +333,38 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
 
 </div>
 
+<!-- Session Detail Modal -->
+<div class="modal-overlay" id="session-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>会话详情</h3>
+      <button class="modal-close" onclick="closeSessionModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="session-modal-body"></div>
+  </div>
+</div>
+
 <script>
 // ==================== 全局状态 ====================
-const DATA_BASE = 'data/';
-let currentDate = getYesterdayStr();
-let currentViewMode = 'day';
-let availableDates = [];
-let currentData = null;
-let dashboardChart = null;
-let agentsChart = null;
-let reportRadarChart = null;
+var DATA_BASE = 'data/';
+var currentDate = getYesterdayStr();
+var currentRange = 'day';
+var customStart = '', customEnd = '';
+var availableDates = [];
+var currentData = null;
+var allDayData = {}; // 缓存自定义区间加载的日数据
+var dashboardChart = null, agentsChart = null, reportRadarChart = null;
+var cachedAgents = [];
 
 function getYesterdayStr() {
-  const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0];
+  var d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0];
 }
 
 // ==================== 工具函数 ====================
 function showToast(msg, type) {
-  const toast = document.createElement('div');
-  toast.className = `toast ${type||'success'}`;
+  var toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.style.background = type === 'error' ? '#ef4444' : type === 'warning' ? '#f59e0b' : '#10b981';
   toast.textContent = msg;
   document.body.appendChild(toast);
   setTimeout(function(){ toast.remove(); }, 3000);
@@ -326,108 +431,288 @@ function escapeHtml(text) {
 }
 
 // ==================== 数据加载 ====================
-async function fetchDataFile(filename) {
-  try {
-    var resp = await fetch(DATA_BASE + filename);
-    if (!resp.ok) return null;
-    return await resp.json();
-  } catch(e) {
-    console.error('Failed to fetch ' + filename + ':', e);
-    return null;
+function fetchDataFile(filename) {
+  return fetch(DATA_BASE + filename)
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .catch(function(e) { console.error('Failed to fetch ' + filename + ':', e); return null; });
+}
+
+function loadLatest() { return fetchDataFile('latest.json'); }
+
+function loadDateData(date, rangeType) {
+  var suffix = '';
+  if (rangeType === 'week') suffix = '-week';
+  else if (rangeType === 'month') suffix = '-month';
+  return fetchDataFile(date + suffix + '.json');
+}
+
+function getDateRange() {
+  // Calculate date range for custom mode
+  if (currentRange !== 'custom') return [];
+  if (!customStart || !customEnd) return [];
+  var dates = [];
+  var s = new Date(customStart + 'T00:00:00+08:00');
+  var e = new Date(customEnd + 'T00:00:00+08:00');
+  var now = new Date();
+  if (e > now) e = new Date(now.toISOString().split('T')[0] + 'T00:00:00+08:00');
+  while (s <= e) {
+    dates.push(s.toISOString().split('T')[0]);
+    s.setDate(s.getDate() + 1);
   }
+  return dates;
 }
 
-async function loadLatest() {
-  return await fetchDataFile('latest.json');
+async function aggregateCustomRange() {
+  var dates = getDateRange();
+  if (dates.length === 0) return null;
+  if (dates.length === 1) return await loadDateData(dates[0], 'day');
+
+  var allData = [];
+  for (var i = 0; i < dates.length; i++) {
+    var d = await loadDateData(dates[i], 'day');
+    if (d) allData.push(d);
+  }
+  if (allData.length === 0) return null;
+
+  // Merge multiple days into one dataset
+  var merged = {
+    generatedAt: new Date().toISOString(),
+    date: customStart + ' ~ ' + customEnd,
+    days: dates.length,
+    overview: mergeOverviews(allData.map(function(d){ return d.overview; })),
+    agents: mergeAgents(allData.map(function(d){ return d.agents || []; })),
+    report: null
+  };
+  merged.report = buildReport(merged.overview, merged.agents, merged.date, dates.length);
+  return merged;
 }
 
-async function loadDateData(date, isWeek) {
-  var filename = isWeek ? (date + '-week.json') : (date + '.json');
-  return await fetchDataFile(filename);
+function mergeOverviews(ovs) {
+  var m = {};
+  for (var k in ovs[0]) {
+    var v = ovs[0][k];
+    if (typeof v === 'number') m[k] = ovs.reduce(function(s, o){ return s + (o[k] || 0); }, 0);
+    else m[k] = v;
+  }
+  return m;
+}
+
+function mergeAgents(agentArrs) {
+  var map = {};
+  for (var i = 0; i < agentArrs.length; i++) {
+    for (var j = 0; j < agentArrs[i].length; j++) {
+      var a = agentArrs[i][j];
+      if (!map[a.id]) {
+        map[a.id] = JSON.parse(JSON.stringify(a));
+      } else {
+        var t = map[a.id];
+        for (var k in a) {
+          if (typeof a[k] === 'number') t[k] = (t[k] || 0) + a[k];
+        }
+        // Take the earliest firstOnline and latest lastLogout
+        if (a.firstOnlineTime && (!t.firstOnlineTime || a.firstOnlineTime < t.firstOnlineTime)) t.firstOnlineTime = a.firstOnlineTime;
+        if (a.lastLogoutTime && (!t.lastLogoutTime || a.lastLogoutTime > t.lastLogoutTime)) t.lastLogoutTime = a.lastLogoutTime;
+        t.onlineDuration = (t.onlineDuration || 0) + (a.onlineDuration || 0);
+        t.workDays = (t.workDays || 0) + (a.workDays || 0);
+        t.loginDays = (t.loginDays || 0) + (a.loginDays || 0);
+      }
+    }
+  }
+  var list = Object.values(map);
+  // Recalculate scores
+  list.forEach(function(a){ a.score = calcScore(a); a.grade = getGradeLabel(a.score); });
+  list.sort(function(a,b){ return b.score - a.score; });
+  return list;
+}
+
+function calcScore(a) {
+  var s = 50;
+  var replyR = parseFloat(a.replyRatio) || 0;
+  s += Math.min(replyR, 100) * 0.15;
+  var satR = parseFloat(a.satisfactionRatio) || 0;
+  s += Math.min(satR, 100) * 0.20;
+  var total = a.totalSessions || 1;
+  var valid = a.validSessions || 0;
+  s += Math.min(valid/total*100, 100) * 0.10;
+  var noReply = parseFloat(a.noReplyRatio) || 0;
+  if (noReply > 0 && noReply <= 1) noReply *= 100;
+  s += Math.max(0, 100 - noReply) * 0.10;
+  var respSec = (a.avgRespTime || 0) / 1000;
+  s += Math.min(Math.max(0, 100 - respSec/3), 100) * 0.15;
+  s += Math.min(parseFloat(a.oneOffRatio) || 0, 100) * 0.10;
+  s += Math.min(parseFloat(a.evaRatio) || 0, 100) * 0.10;
+  s += Math.min((a.incomingSessions || 0) / 2, 100) * 0.10;
+  return Math.round(Math.min(s, 100) * 10) / 10;
+}
+
+function getGradeLabel(s) {
+  if (s >= 90) return '优秀';
+  if (s >= 80) return '良好';
+  if (s >= 70) return '合格';
+  if (s >= 60) return '待改进';
+  return '不合格';
+}
+
+function buildReport(overview, agents, dateLabel, days) {
+  var evals = agents.map(function(a){
+    var score = a.score || calcScore(a);
+    var grade = a.grade || getGradeLabel(score);
+    var strengths = [], weaknesses = [];
+    if ((a.replyRatio || 0) >= 95) strengths.push('应答率优秀');
+    else if ((a.replyRatio || 0) > 0 && (a.replyRatio || 0) < 80) weaknesses.push('应答率偏低');
+    if ((a.satisfactionRatio || 0) >= 90) strengths.push('满意度高');
+    else if ((a.satisfactionRatio || 0) > 0 && (a.satisfactionRatio || 0) < 70) weaknesses.push('满意度较低');
+    if ((a.avgRespTime || 0) <= 30000) strengths.push('响应迅速');
+    else if ((a.avgRespTime || 0) > 120000) weaknesses.push('响应较慢');
+    if (!strengths.length) strengths.push('各项指标均衡');
+    if (!weaknesses.length) weaknesses.push('无明显短板');
+    var sug = '';
+    if (grade === '优秀') sug = '表现优秀，建议作为团队标杆';
+    else if (grade === '良好') sug = '整体良好，可在细节上优化';
+    else if (grade === '合格') sug = '基本达标，仍有提升空间';
+    else sug = '需重点关注，制定提升计划';
+    return { id: a.id, name: a.name, incomingSessions: a.incomingSessions||0, validSessions: a.validSessions||0, score: score, grade: grade, strengths: strengths, weaknesses: weaknesses, suggestion: sug };
+  });
+
+  var grades = {};
+  evals.forEach(function(e){ grades[e.grade] = (grades[e.grade] || 0) + 1; });
+  var top = evals[0] || {};
+
+  return {
+    reportDate: dateLabel, days: days,
+    generatedAt: new Date().toLocaleString('zh-CN'),
+    overall: {
+      totalSessions: overview.totalSessions || 0,
+      effectiveSessions: overview.effectiveSessions || 0,
+      answerRatio: overview.answerRatio || 0,
+      satisfactionRatio: overview.satisfactionRatio || 0,
+      avgFirstRespTime: overview.avgFirstRespTime || 0,
+      avgRespTime: overview.avgRespTime || 0,
+      oneOffRatio: overview.oneOffRatio || 0,
+      totalMessages: overview.totalMessages || 0,
+      loginStaffCount: overview.loginStaffCount || 0,
+      queueCount: overview.queueCount || 0,
+      evaRatio: overview.evaRatio || 0,
+      totalConsultCount: overview.totalConsultCount || 0
+    },
+    agentEvaluations: evals,
+    keyFindings: [],
+    recommendations: [],
+    scoreSummary: { grades: grades, avgScore: agents.length ? (agents.reduce(function(s,a){ return s+(a.score||calcScore(a)); },0)/agents.length).toFixed(1) : 0, topAgent: top.name||'', topScore: top.score||0, totalAgents: agents.length }
+  };
 }
 
 // ==================== 导航切换 ====================
 document.querySelectorAll('.nav-item').forEach(function(item) {
   item.addEventListener('click', function() {
-    document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+    document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
     this.classList.add('active');
-    document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+    document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
     var pageId = 'page-' + this.dataset.page;
     document.getElementById(pageId).classList.add('active');
     loadPageData(this.dataset.page);
   });
 });
 
-// ==================== 日期选择 ====================
-function toggleRange() {
-  var btn = document.getElementById('btnRange');
-  if (currentViewMode === 'day') {
-    currentViewMode = 'week';
-    btn.textContent = '📅 近一周';
-    btn.classList.add('active');
-  } else {
-    currentViewMode = 'day';
-    btn.textContent = '📅 单日';
-    btn.classList.remove('active');
-  }
-  loadAllData();
-}
-
-var datePicker = document.getElementById('datePicker');
-datePicker.addEventListener('change', function() {
-  currentDate = this.value;
-  loadAllData();
-});
-
-// ==================== 页面数据加载 ====================
 function loadPageData(page) {
   switch (page) {
     case 'dashboard': loadDashboard(); break;
     case 'agents': loadAgents(); break;
     case 'report': loadReport(); break;
+    case 'sessions': loadSessionsPage(); break;
   }
 }
 
-async function loadAllData() {
-  if (currentViewMode === 'week') {
-    var weekData = await loadDateData(currentDate, true);
-    if (weekData) {
-      currentData = weekData;
-      var activePage = document.querySelector('.nav-item.active');
-      if (activePage) loadPageData(activePage.dataset.page);
-    } else {
-      showToast('该日期的周数据尚未生成，请等待凌晨自动抓取', 'error');
-    }
+// ==================== 日期/区间选择 ====================
+var rangeTypeEl = document.getElementById('rangeType');
+var customRangeEl = document.getElementById('customRange');
+var datePicker = document.getElementById('datePicker');
+var customStartEl = document.getElementById('customStart');
+var customEndEl = document.getElementById('customEnd');
+
+rangeTypeEl.addEventListener('change', function() {
+  currentRange = this.value;
+  if (currentRange === 'custom') {
+    customRangeEl.classList.add('show');
+    if (!customStartEl.value) customStartEl.value = currentDate;
+    if (!customEndEl.value) customEndEl.value = getYesterdayStr();
+    customStart = customStartEl.value;
+    customEnd = customEndEl.value;
+    datePicker.style.display = 'none';
   } else {
-    var dayData = await loadDateData(currentDate, false);
-    if (dayData) {
-      currentData = dayData;
-      var activePage = document.querySelector('.nav-item.active');
-      if (activePage) loadPageData(activePage.dataset.page);
-    } else {
-      showToast('该日期暂无数据，请选择其他日期', 'error');
-    }
+    customRangeEl.classList.remove('show');
+    datePicker.style.display = '';
+    if (!availableDates.length) return;
+    currentDate = availableDates[0];
+    datePicker.value = currentDate;
   }
+  loadAllData();
+});
+
+datePicker.addEventListener('change', function() {
+  currentDate = this.value;
+  loadAllData();
+});
+
+customStartEl.addEventListener('change', function() {
+  customStart = this.value;
+  if (customEnd && customStart > customEnd) { customEnd = customStart; customEndEl.value = customStart; }
+  loadAllData();
+});
+customEndEl.addEventListener('change', function() {
+  customEnd = this.value;
+  if (customEnd < customStart) { customStart = customEnd; customStartEl.value = customEnd; }
+  loadAllData();
+});
+
+// ==================== 全局加载 ====================
+async function loadAllData() {
+  if (currentRange === 'custom') {
+    currentData = await aggregateCustomRange();
+  } else {
+    currentData = await loadDateData(currentDate, currentRange);
+  }
+  if (!currentData) {
+    var emptyHtml = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3><p>该日期/区间的数据尚未生成，请等待凌晨自动抓取或选择其他日期</p></div>';
+    var page = document.querySelector('.nav-item.active');
+    if (page) {
+      var pid = 'page-' + page.dataset.page;
+      document.getElementById(pid).querySelector('.page').style.display = 'block';
+      if (page.dataset.page === 'dashboard') {
+        document.getElementById('dashboard-content').style.display = 'block';
+        document.getElementById('overview-cards').innerHTML = emptyHtml;
+      } else if (page.dataset.page === 'agents') {
+        document.getElementById('agents-content').style.display = 'block';
+        document.getElementById('agents-summary-cards').innerHTML = emptyHtml;
+      } else if (page.dataset.page === 'report') {
+        document.getElementById('report-content').style.display = 'block';
+        document.getElementById('report-overview-cards').innerHTML = emptyHtml;
+      }
+    }
+    showToast('该日期/区间暂无数据', 'warning');
+    return;
+  }
+  var activePage = document.querySelector('.nav-item.active');
+  if (activePage) loadPageData(activePage.dataset.page);
 }
 
 // ==================== 1. 仪表盘 ====================
 function loadDashboard() {
-  if (!currentData) {
+  if (!currentData || !currentData.overview) {
     document.getElementById('dashboard-content').style.display = 'block';
-    document.getElementById('overview-cards').innerHTML =
-      '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3><p>请选择一个有数据的日期</p></div>';
+    document.getElementById('overview-cards').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3></div>';
     return;
   }
   showLoading('dashboard');
   var d = currentData.overview;
   var cards = [
-    { label: '总会话量', value: d.totalSessions||0, cls: 'primary', sub: '有效会话 '+(d.effectiveSessions||0) },
+    { label: '总会话量', value: d.totalSessions||0, cls: 'primary', sub: '有效 '+(d.effectiveSessions||0) },
     { label: '总消息量', value: d.totalMessages||0, cls: 'primary', sub: '咨询量 '+(d.totalConsultCount||0) },
     { label: '应答率', value: (d.answerRatio||0)+'%', cls: (d.answerRatio||0)>=85?'success':'warning' },
     { label: '满意度', value: (d.satisfactionRatio||0)+'%', cls: (d.satisfactionRatio||0)>=80?'success':'warning' },
     { label: '平均首次响应', value: fmtMs(d.avgFirstRespTime), cls: 'primary', sub: '平均响应 '+fmtMs(d.avgRespTime) },
     { label: '一次性解决率', value: (d.oneOffRatio||0)+'%', cls: (d.oneOffRatio||0)>=60?'success':'warning' },
-    { label: '排队总量', value: d.queueCount||0, cls: (d.queueCount||0)>10?'warning':'success', sub: '最长排队 '+fmtMs((d.maxQueueTime||0)*1000) },
+    { label: '排队总量', value: d.queueCount||0, cls: (d.queueCount||0)>10?'warning':'success', sub: '最长 '+fmtMs((d.maxQueueTime||0)*1000) },
     { label: '登录坐席', value: d.loginStaffCount||0, cls: 'primary', sub: '访问量 '+(d.visitCount||0) },
   ];
   document.getElementById('overview-cards').innerHTML = cards.map(function(c) {
@@ -449,21 +734,21 @@ function loadDashboard() {
 
 // ==================== 2. 坐席绩效 ====================
 function loadAgents() {
-  if (!currentData || !currentData.agents) {
+  if (!currentData || !currentData.agents || !currentData.agents.length) {
     document.getElementById('agents-content').style.display = 'block';
-    document.getElementById('agents-summary-cards').innerHTML =
-      '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3></div>';
+    document.getElementById('agents-summary-cards').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3></div>';
     return;
   }
   showLoading('agents');
   var agents = currentData.agents;
+  cachedAgents = agents;
   document.getElementById('agents-count').textContent = '共 ' + agents.length + ' 名坐席';
 
   var totalIncoming = agents.reduce(function(s,a){ return s+(a.incomingSessions||0); }, 0);
-  var avgScore = agents.length>0 ? (agents.reduce(function(s,a){ return s+a.score; },0)/agents.length).toFixed(1) : 0;
+  var avgScore = agents.length>0 ? (agents.reduce(function(s,a){ return s+(a.score||calcScore(a)); },0)/agents.length).toFixed(1) : 0;
   var topAgent = agents.length>0 ? agents[0].name : '-';
   var grades = {};
-  agents.forEach(function(a){ grades[a.grade] = (grades[a.grade]||0)+1; });
+  agents.forEach(function(a){ var g = a.grade||getGradeLabel(a.score||calcScore(a)); grades[g] = (grades[g]||0)+1; });
 
   document.getElementById('agents-summary-cards').innerHTML =
     '<div class="stat-card"><div class="label">坐席总数</div><div class="value primary">'+agents.length+'</div></div>'+
@@ -473,7 +758,7 @@ function loadAgents() {
 
   var tbody = document.querySelector('#agents-table tbody');
   tbody.innerHTML = agents.map(function(a,i){
-    return '<tr><td>'+(i+1)+'</td><td><strong>'+escapeHtml(a.name||'-')+'</strong></td><td>'+escapeHtml(a.account||'-')+'</td><td><strong>'+(a.incomingSessions||0)+'</strong></td><td>'+(a.validSessions||0)+'</td><td>'+fmtRatio(a.replyRatio)+'</td><td>'+fmtRatio(a.satisfactionRatio)+'</td><td>'+fmtMs(a.avgRespTime)+'</td><td>'+fmtMs(a.avgFirstRespTime)+'</td><td>'+fmtRatio(a.oneOffRatio)+'</td><td>'+fmtRatio(a.evaRatio)+'</td><td><strong style="color:var(--primary)">'+a.score+'</strong></td><td><span class="grade '+getGradeClass(a.grade)+'">'+a.grade+'</span></td><td style="font-size:12px">'+fmtTs(a.firstOnlineTime)+'</td><td style="font-size:12px">'+fmtTs(a.lastLogoutTime)+'</td><td>'+fmtDuration(a.onlineDuration)+'</td><td>'+(a.workDays||0)+'天</td></tr>';
+    return '<tr><td>'+(i+1)+'</td><td><strong>'+escapeHtml(a.name||'-')+'</strong></td><td>'+escapeHtml(a.account||'-')+'</td><td><strong>'+(a.incomingSessions||0)+'</strong></td><td>'+(a.validSessions||0)+'</td><td>'+fmtRatio(a.replyRatio)+'</td><td>'+fmtRatio(a.satisfactionRatio)+'</td><td>'+fmtMs(a.avgRespTime)+'</td><td>'+fmtMs(a.avgFirstRespTime)+'</td><td>'+fmtRatio(a.oneOffRatio)+'</td><td>'+fmtRatio(a.evaRatio)+'</td><td><strong style="color:var(--primary)">'+(a.score||calcScore(a))+'</strong></td><td><span class="grade '+getGradeClass(a.grade||getGradeLabel(a.score||calcScore(a)))+'">'+(a.grade||getGradeLabel(a.score||calcScore(a)))+'</span></td><td style="font-size:12px">'+fmtTs(a.firstOnlineTime)+'</td><td style="font-size:12px">'+fmtTs(a.lastLogoutTime)+'</td><td>'+fmtDuration(a.onlineDuration)+'</td><td>'+(a.workDays||0)+'天</td></tr>';
   }).join('');
 
   if (agentsChart) agentsChart.destroy();
@@ -492,8 +777,7 @@ function loadAgents() {
 function loadReport() {
   if (!currentData || !currentData.report) {
     document.getElementById('report-content').style.display = 'block';
-    document.getElementById('report-overview-cards').innerHTML =
-      '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3></div>';
+    document.getElementById('report-overview-cards').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3></div>';
     return;
   }
   showLoading('report');
@@ -542,17 +826,294 @@ function loadReport() {
   hideLoading('report');
 }
 
+// ==================== 4. 客服会话查看 ====================
+async function loadSessionsPage() {
+  document.getElementById('sessions-content').style.display = 'block';
+
+  // Populate agent dropdown if not already filled
+  if (cachedAgents.length === 0) {
+    // Try loading from latest available data
+    var latest = await loadLatest();
+    if (latest && latest.dates && latest.dates.length > 0) {
+      var d = await loadDateData(latest.dates[0], 'day');
+      if (d && d.agents) cachedAgents = d.agents;
+    }
+  }
+
+  // Set default date range to last 7 days
+  var end = new Date();
+  end.setDate(end.getDate() - 1);
+  var start = new Date(end);
+  start.setDate(start.getDate() - 6);
+  document.getElementById('session-date-start').value = start.toISOString().split('T')[0];
+  document.getElementById('session-date-end').value = end.toISOString().split('T')[0];
+
+  // Check for session data availability
+  var latest = await loadLatest();
+  var hasSessions = latest && latest.sessionExportAvailable;
+
+  var permWarn = document.getElementById('session-perm-warn');
+  var dateStr = (end).toISOString().split('T')[0];
+  var sessionExists = false;
+
+  // Try loading sessions file
+  var sessionFile = await fetchDataFile('sessions-' + dateStr + '.json');
+  if (sessionFile && sessionFile.sessions && sessionFile.sessions.length > 0) {
+    sessionExists = true;
+    permWarn.style.display = 'none';
+  } else {
+    // Check other recent dates
+    for (var i = 1; i <= 7; i++) {
+      var d2 = new Date(end);
+      d2.setDate(d2.getDate() - i);
+      var ds = d2.toISOString().split('T')[0];
+      sessionFile = await fetchDataFile('sessions-' + ds + '.json');
+      if (sessionFile && sessionFile.sessions && sessionFile.sessions.length > 0) {
+        sessionExists = true;
+        break;
+      }
+    }
+    permWarn.style.display = sessionExists ? 'none' : 'block';
+  }
+
+  // Populate agent select
+  var sel = document.getElementById('session-agent-select');
+  sel.innerHTML = '<option value="">-- 全部坐席 --</option>';
+  cachedAgents.forEach(function(a) {
+    sel.innerHTML += '<option value="' + a.id + '">' + escapeHtml(a.name || a.account || '') + '</option>';
+  });
+}
+
+async function loadSessionData() {
+  var startDate = document.getElementById('session-date-start').value;
+  var endDate = document.getElementById('session-date-end').value;
+  var agentId = document.getElementById('session-agent-select').value;
+
+  if (!startDate || !endDate) {
+    showToast('请选择日期范围', 'error');
+    return;
+  }
+
+  // Load all session files in the date range
+  var allSessions = [];
+  var start = new Date(startDate + 'T00:00:00+08:00');
+  var end = new Date(endDate + 'T00:00:00+08:00');
+  var now = new Date();
+  if (end > now) end = new Date(now.toISOString().split('T')[0] + 'T00:00:00+08:00');
+
+  showLoading('sessions');
+  while (start <= end) {
+    var dateStr = start.toISOString().split('T')[0];
+    var file = await fetchDataFile('sessions-' + dateStr + '.json');
+    if (file && file.sessions) {
+      var sessions = file.sessions;
+      if (agentId) sessions = sessions.filter(function(s) { return String(s.staffId) === String(agentId); });
+      allSessions = allSessions.concat(sessions);
+    }
+    start.setDate(start.getDate() + 1);
+  }
+  hideLoading('sessions');
+
+  var section = document.getElementById('sessions-list-section');
+  var summarySection = document.getElementById('session-summary-section');
+
+  if (allSessions.length === 0) {
+    section.style.display = 'block';
+    document.getElementById('sessions-count').textContent = '共 0 条';
+    document.querySelector('#sessions-table tbody').innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-secondary);padding:30px">该时间范围内暂无会话数据。<br>请确保已开通七鱼「会话导出」API 权限，系统将在每日凌晨 2:00-6:00 自动缓存会话。</td></tr>';
+    summarySection.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  document.getElementById('sessions-count').textContent = '共 ' + allSessions.length + ' 条会话';
+
+  // Sort by startTime descending
+  allSessions.sort(function(a, b) { return (b.startTime || 0) - (a.startTime || 0); });
+
+  var tbody = document.querySelector('#sessions-table tbody');
+  tbody.innerHTML = allSessions.map(function(s) {
+    var sTypeMap = {0:'正常',1:'留言',2:'留言',3:'超时'};
+    var evalMap = {5:'非常满意',4:'满意',3:'一般',2:'不满意',1:'非常不满意'};
+    var statusMap = {0:'未解决',1:'已解决',2:'解决中'};
+    var msgCount = (s.staffMessageCount || 0) + (s.userMessageCount || 0);
+    return '<tr>'+
+      '<td>'+(s.id||'-')+'</td>'+
+      '<td>'+(s.userId||'-')+'</td>'+
+      '<td>'+escapeHtml(s.staffName||'-')+'</td>'+
+      '<td>'+formatTime(s.startTime)+'</td>'+
+      '<td>'+formatTime(s.endTime)+'</td>'+
+      '<td>'+(sTypeMap[s.sType]||'未知')+'</td>'+
+      '<td>'+escapeHtml(s.category||'-')+'</td>'+
+      '<td>'+(s.evaluation && s.evaluation > 0 ? (evalMap[s.evaluation]||s.evaluation) : '未评价')+'</td>'+
+      '<td>'+msgCount+'</td>'+
+      '<td>'+(statusMap[s.status]||'未知')+'</td>'+
+      '<td><button class="btn btn-sm btn-text" onclick="openSessionDetail('+s.id+')">查看详情</button></td>'+
+      '</tr>';
+  }).join('');
+
+  // Generate AI summary
+  generateSessionSummary(allSessions);
+}
+
+function generateSessionSummary(sessions) {
+  var section = document.getElementById('session-summary-section');
+  if (sessions.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  var content = document.getElementById('session-summary-content');
+
+  // Collect analytics
+  var total = sessions.length;
+  var evaluated = sessions.filter(function(s){ return s.evaluation && s.evaluation > 0; });
+  var avgEval = evaluated.length > 0 ? (evaluated.reduce(function(sum, s){ return sum + (s.evaluation||0); }, 0) / evaluated.length).toFixed(1) : 0;
+  var evalMap = {5:'非常满意',4:'满意',3:'一般',2:'不满意',1:'非常不满意'};
+  var evalCounts = {};
+  evaluated.forEach(function(s){ var k = evalMap[s.evaluation]||'未知'; evalCounts[k] = (evalCounts[k]||0) + 1; });
+
+  var types = {};
+  sessions.forEach(function(s){
+    var t = s.category || '其他';
+    if (!t.match(/[\u4e00-\u9fa5]/)) t = '其他';
+    types[t] = (types[t]||0) + 1;
+  });
+  var sortedTypes = Object.entries(types).sort(function(a,b){ return b[1] - a[1]; });
+
+  var staffMap = {};
+  sessions.forEach(function(s){
+    var name = s.staffName || '未知';
+    staffMap[name] = (staffMap[name]||0) + 1;
+  });
+  var sortedStaff = Object.entries(staffMap).sort(function(a,b){ return b[1] - a[1]; });
+
+  var evalSummary = '';
+  var evalEntries = Object.entries(evalCounts);
+  if (evalEntries.length > 0) {
+    evalSummary = '评价分布：' + evalEntries.map(function(e){ return e[0]+' '+e[1]+'次'; }).join('，') + '。平均评价 ' + avgEval + ' 分。';
+  } else {
+    evalSummary = '该批次会话暂无用户评价。';
+  }
+
+  var topCategories = sortedTypes.slice(0, 3).map(function(t){ return t[0]+'（'+t[1]+'次）'; }).join('、');
+  var topStaff = sortedStaff.slice(0, 3).map(function(s){ return s[0]+'（'+s[1]+'次）'; }).join('、');
+
+  content.innerHTML =
+    '<div class="stats-grid" style="margin-bottom:16px">'+
+      '<div class="stat-card"><div class="label">总会话数</div><div class="value primary">'+total+'</div></div>'+
+      '<div class="stat-card"><div class="label">已评价</div><div class="value '+(evaluated.length>total*0.5?'success':'warning')+'">'+evaluated.length+'</div><div class="sub">参评率 '+(total>0?(evaluated.length/total*100).toFixed(0):0)+'%</div></div>'+
+      '<div class="stat-card"><div class="label">平均评价</div><div class="value '+(avgEval>=4?'success':avgEval>=3?'warning':'danger')+'">'+avgEval+'/5</div></div>'+
+    '</div>'+
+    '<div class="session-summary">'+
+      '<strong>📊 AI 概括分析</strong><br><br>'+
+      '该时间段内共服务 <strong>'+total+'</strong> 次咨询'+
+      (sortedStaff.length > 0 ? '，由 <strong>'+sortedStaff.length+'</strong> 位坐席提供服务。' : '。')+
+      (topCategories ? '主要咨询类别：<strong>'+topCategories+'</strong>。' : '')+
+      '其中 <strong>'+evaluated.length+'</strong> 次获得用户评价（占比 '+(total>0?(evaluated.length/total*100).toFixed(0):0)+'%）。'+
+      evalSummary+
+      (sortedStaff.length > 0 ? '<br><br>服务量前三坐席：'+topStaff+'。' : '')+
+    '</div>'+
+    '<p style="font-size:12px;color:var(--text-secondary);margin-top:12px">💡 点击每条会话的「查看详情」可浏览具体对话内容。如需更深入的分析，可在七鱼管理后台导出详细会话报告。</p>';
+}
+
+async function loadSessionById() {
+  var sid = document.getElementById('session-id-input').value;
+  if (!sid) { showToast('请输入会话ID', 'error'); return; }
+  openSessionDetail(sid);
+}
+
+function openSessionDetail(sessionId) {
+  var modal = document.getElementById('session-modal');
+  var body = document.getElementById('session-modal-body');
+
+  body.innerHTML = '<div style="text-align:center;padding:30px"><div class="spinner"></div><div style="margin-top:12px">加载会话详情...</div></div>';
+  modal.classList.add('show');
+
+  // Try multiple dates
+  loadSessionDetail(sessionId).then(function(result) {
+    if (!result) {
+      body.innerHTML = '<div class="empty-state"><div class="icon">📭</div><h3>会话详情不可用</h3><p>该会话的详细消息内容暂未缓存。请在七鱼管理后台查看。</p><p style="font-size:12px;color:var(--text-secondary);margin-top:8px">会话ID: '+sessionId+'</p></div>';
+      return;
+    }
+    renderSessionDetail(body, sessionId, result);
+  });
+}
+
+async function loadSessionDetail(sessionId) {
+  // Search all available session files
+  for (var offset = 0; offset <= 30; offset++) {
+    var d = new Date();
+    d.setDate(d.getDate() - 1 - offset);
+    var dateStr = d.toISOString().split('T')[0];
+    var file = await fetchDataFile('sessions-' + dateStr + '.json');
+    if (!file || !file.sessions) continue;
+    var found = file.sessions.find(function(s) { return String(s.id) === String(sessionId); });
+    if (found) return found;
+  }
+  return null;
+}
+
+function renderSessionDetail(body, sessionId, session) {
+  var sTypeMap = {0:'正常会话',1:'留言',2:'留言',3:'超时会话'};
+  var evalMap = {5:'非常满意',4:'满意',3:'一般',2:'不满意',1:'非常不满意'};
+  var statusMap = {0:'未解决',1:'已解决',2:'解决中'};
+
+  var html =
+    '<div class="session-summary">'+
+      '<strong>会话信息</strong><br>'+
+      '会话ID: '+sessionId+' | 访客ID: '+(session.userId||'-')+'<br>'+
+      '坐席: '+escapeHtml(session.staffName||'-')+' | 类型: '+(sTypeMap[session.sType]||'未知')+'<br>'+
+      '开始: '+formatTime(session.startTime)+' | 结束: '+formatTime(session.endTime)+'<br>'+
+      '分类: '+escapeHtml(session.category||'未分类')+' | 状态: '+(statusMap[session.status]||'未知')+'<br>'+
+      (session.evaluation ? '评价: '+(evalMap[session.evaluation]||session.evaluation) : '评价: 未评价')+
+    '</div>';
+
+  // Show messages if available
+  if (session.messages && session.messages.length > 0) {
+    html += '<h4 style="margin:16px 0 8px">💬 对话记录（' + session.messages.length + ' 条消息）</h4>';
+    html += '<div style="max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:12px;background:#fafbfc">';
+
+    session.messages.sort(function(a,b){ return (a.time||0) - (b.time||0); });
+
+    html += session.messages.map(function(msg) {
+      var role = msg.role || '';
+      var sender = msg.sender || '';
+      var content = escapeHtml(msg.content || msg.text || '');
+      var timeStr = formatTime(msg.time);
+
+      if (role === 'staff' || sender === 'staff' || role === 'agent') {
+        return '<div class="msg-row staff"><div class="msg-meta">'+timeStr+' · 客服</div><div>'+content+'</div></div>';
+      } else if (role === 'system' || role === 'sys') {
+        return '<div class="msg-row system"><div class="msg-meta">'+timeStr+'</div><div>'+content+'</div></div>';
+      } else {
+        return '<div class="msg-row user"><div class="msg-meta">'+timeStr+' · 用户</div><div>'+content+'</div></div>';
+      }
+    }).join('');
+
+    html += '</div>';
+  } else {
+    html += '<div class="banner-bar banner-info" style="margin-top:16px">'+
+      '<strong>📝 对话内容暂未缓存</strong><br>'+
+      '当前仅缓存了会话元数据（ID、时间、评价等），详细对话内容需要开通七鱼「单条会话导出」API 权限后，系统将在凌晨自动抓取。<br>'+
+      '如需立即查看对话，请登录 <a href="https://qiyukf.com" target="_blank">七鱼管理后台</a> → 会话记录 → 搜索会话ID: '+sessionId+
+    '</div>';
+  }
+
+  body.innerHTML = html;
+}
+
+function closeSessionModal() {
+  document.getElementById('session-modal').classList.remove('show');
+}
+
 // ==================== 初始化 ====================
 async function init() {
-  // 加载可用日期列表
   var latest = await loadLatest();
   if (latest) {
     availableDates = latest.dates || [];
     document.getElementById('updateBadge').textContent = '🕐 更新: '+ (latest.updatedAt||'未知');
-    // 填充日期选择器
+
     var picker = document.getElementById('datePicker');
     picker.innerHTML = availableDates.map(function(d){ return '<option value="'+d+'">'+d+'</option>'; }).join('');
-    // 默认选择最近一天
     if (availableDates.length > 0) {
       currentDate = availableDates[0];
       picker.value = currentDate;
@@ -561,16 +1122,23 @@ async function init() {
     document.getElementById('updateBadge').textContent = '⚠️ 暂无数据';
   }
 
-  // 尝试加载默认日期数据
+  // Set default range to 单日
+  currentRange = 'day';
+  document.getElementById('rangeType').value = 'day';
+  document.getElementById('customRange').classList.remove('show');
+
   if (availableDates.length > 0) {
-    currentData = await loadDateData(currentDate, false);
+    currentData = await loadDateData(currentDate, 'day');
     loadDashboard();
   } else {
-    // 显示空状态
     document.getElementById('dashboard-content').style.display = 'block';
-    document.getElementById('overview-cards').innerHTML =
-      '<div class="empty-state" style="grid-column:1/-1"><div class="icon">🔄</div><h3>等待数据生成</h3><p>数据将在每日凌晨 2:00 自动抓取。首次部署后，可前往 GitHub Actions 页面手动触发"每日数据抓取"工作流来立即生成数据。</p></div>';
+    document.getElementById('overview-cards').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">🔄</div><h3>等待数据生成</h3><p>数据将在每日凌晨 2:00 自动抓取。也可前往 <a href="https://github.com/linyy663/qiyu/actions" target="_blank">GitHub Actions</a> 手动触发。</p></div>';
   }
+
+  // Close modal on overlay click
+  document.getElementById('session-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeSessionModal();
+  });
 }
 
 init();

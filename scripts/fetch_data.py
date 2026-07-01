@@ -651,6 +651,15 @@ def main():
             json.dump(week_data, f, ensure_ascii=False)
         print(f"  Saved: {filepath}")
 
+    # 近一月数据
+    month_data = fetch_data_for_date(yesterday, days=30)
+    if month_data:
+        filename = f"{yesterday}-month.json"
+        filepath = os.path.join(OUTPUT_DIR, filename)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(month_data, f, ensure_ascii=False)
+        print(f"  Saved: {filepath}")
+
     # 今天数据（实时截断到当前时刻）
     today_data = fetch_data_for_date(today)
     if today_data:
