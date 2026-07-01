@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>七鱼客服数据看板</title>
+<title>七鱼客服数据看板 - 会话记录</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root {
@@ -37,6 +37,9 @@ body {
 .custom-range-wrap { display: none; align-items: center; gap: 4px; }
 .custom-range-wrap.show { display: flex; }
 .custom-range-wrap span { font-size: 12px; opacity: 0.8; }
+
+.top-banner { background: #fef3c7; border-bottom: 1px solid #f59e0b; padding: 8px 24px; font-size: 13px; color: #92400e; text-align: center; }
+.top-banner a { color: #3b6df0; font-weight: 600; }
 
 .nav {
   background: var(--card-bg); border-bottom: 1px solid var(--border); padding: 0 32px;
@@ -156,7 +159,8 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
   </div>
   <div class="header-right">
     <span class="header-badge" id="updateBadge">🕐 加载中...</span>
-    <select id="rangeType" title="统计周期">
+    <!-- Date controls hidden in session-only mode -->
+    <select id="rangeType" title="统计周期" style="display:none">
       <option value="day">📅 单日</option>
       <option value="week">📊 近一周</option>
       <option value="month">📈 近一月</option>
@@ -171,12 +175,12 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
   </div>
 </div>
 
+<!-- Top Banner -->
+<div class="top-banner">📊 <strong>实时统计</strong>请访问本地 <a href="http://localhost:5890" target="_blank">http://localhost:5890</a> | 本页面仅展示已缓存的<strong>客服会话记录</strong></div>
+
 <!-- Navigation -->
 <div class="nav">
-  <div class="nav-item active" data-page="dashboard">📊 数据总览</div>
-  <div class="nav-item" data-page="agents">👥 坐席绩效</div>
-  <div class="nav-item" data-page="report">📋 质量报告</div>
-  <div class="nav-item" data-page="sessions">💬 客服会话查看</div>
+  <div class="nav-item active" data-page="sessions">💬 客服会话查看</div>
   <div class="nav-item" data-page="about">ℹ️ 关于</div>
 </div>
 
@@ -184,7 +188,7 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
 <div class="main">
 
   <!-- ============ Dashboard ============ -->
-  <div class="page active" id="page-dashboard">
+  <div class="page" id="page-dashboard">
     <div class="loading" id="dashboard-loading"><div class="spinner"></div><div>正在加载数据...</div></div>
     <div id="dashboard-content" style="display:none">
       <div class="stats-grid" id="overview-cards"></div>
@@ -247,7 +251,7 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
   </div>
 
   <!-- ============ Sessions ============ -->
-  <div class="page" id="page-sessions">
+  <div class="page active" id="page-sessions">
     <div class="loading" id="sessions-loading"><div class="spinner"></div><div>正在加载数据...</div></div>
     <div id="sessions-content" style="display:none">
       <div id="session-perm-warn" class="banner-bar banner-warn" style="display:none">
@@ -307,20 +311,22 @@ td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-
       <div class="section-body">
         <div class="banner-bar banner-info" style="margin-bottom:20px">
           <strong>🔧 工作原理</strong><br>
-          本站数据由 GitHub Actions 在每天凌晨 2:00（北京时间）自动调用七鱼开放平台 API 抓取，生成静态 JSON 文件后通过 GitHub Pages 提供服务。
+          本页面仅展示<strong>会话记录</strong>（由 GitHub Actions 每日凌晨缓存）。<br>
+          实时统计数据（总览/坐席绩效/质量报告）请本地运行后端服务：
+          <a href="http://localhost:5890" target="_blank" style="color:#3b6df0;font-weight:600">http://localhost:5890</a>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
           <div style="background:#f8fafc;padding:16px;border-radius:8px">
-            <h4 style="margin-bottom:8px">📅 数据更新</h4>
-            <p style="font-size:13px;color:var(--text-secondary)">每日凌晨 2:05（北京时间）自动抓取单日、近一周、近一月三个维度的统计数据和会话记录。</p>
+            <h4 style="margin-bottom:8px">💬 会话数据</h4>
+            <p style="font-size:13px;color:var(--text-secondary)">每日凌晨 2:00（北京时间）自动导出并缓存前一天会话数据。需开通七鱼「会话导出」API 权限。</p>
           </div>
           <div style="background:#f8fafc;padding:16px;border-radius:8px">
-            <h4 style="margin-bottom:8px">💬 会话查看</h4>
-            <p style="font-size:13px;color:var(--text-secondary)">会话数据需要企业开通七鱼「会话导出」API 权限。开通后，系统将在每日凌晨自动缓存会话数据。</p>
+            <h4 style="margin-bottom:8px">📊 实时统计</h4>
+            <p style="font-size:13px;color:var(--text-secondary)">数据总览、坐席绩效、质量报告为实时数据，需本地运行 Flask 后端（python backend/app.py）访问 localhost:5890。</p>
           </div>
           <div style="background:#f8fafc;padding:16px;border-radius:8px">
-            <h4 style="margin-bottom:8px">📊 数据范围</h4>
-            <p style="font-size:13px;color:var(--text-secondary)">数据总览、坐席绩效、质量报告均来源于七鱼开放平台统计类 API。数据延迟约 1 天。</p>
+            <h4 style="margin-bottom:8px">🔄 更新频率</h4>
+            <p style="font-size:13px;color:var(--text-secondary)">会话数据：每日凌晨缓存一天。实时统计：打开 localhost:5890 即刻刷新。</p>
           </div>
           <div style="background:#f8fafc;padding:16px;border-radius:8px">
             <h4 style="margin-bottom:8px">🔐 安全性</h4>
@@ -1137,11 +1143,11 @@ async function init() {
   document.getElementById('customRange').classList.remove('show');
 
   if (availableDates.length > 0) {
-    currentData = await loadDateData(currentDate, 'day');
-    loadDashboard();
+    loadSessionsPage();
   } else {
-    document.getElementById('dashboard-content').style.display = 'block';
-    document.getElementById('overview-cards').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">🔄</div><h3>等待数据生成</h3><p>数据将在每日凌晨 2:00 自动抓取。也可前往 <a href="https://github.com/linyy663/qiyu/actions" target="_blank">GitHub Actions</a> 手动触发。</p></div>';
+    document.getElementById('sessions-content').style.display = 'block';
+    document.getElementById('sessions-list-section').style.display = 'block';
+    document.querySelector('#sessions-table tbody').innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-secondary)"><div class="icon" style="font-size:32px;margin-bottom:8px">🔄</div><h3>等待数据生成</h3><p>会话数据将在每日凌晨 2:00 自动缓存到 GitHub Pages。<br>如需查看实时统计数据（总览/坐席/报告），请访问 <a href="http://localhost:5890" target="_blank" style="color:#3b6df0;font-weight:600">localhost:5890</a></p></td></tr>';
   }
 
   // Close modal on overlay click
