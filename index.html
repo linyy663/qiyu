@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>七鱼客服统计 - 每日数据看板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f5f7fa; --card-bg: #fff; --text: #1a1a2e; --text-secondary: #666; --border: #e8ecf1;
+  --primary: #3b6df0; --primary-light: #eef3ff; --success: #10b981; --warning: #f59e0b;
+  --danger: #ef4444; --info: #6366f1; --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh;
+}
+.header {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2d5aa0 100%);
+  color: #fff; padding: 0 32px; height: 64px; display: flex; align-items: center;
+  justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.header-logo { width: 36px; height: 36px; background: rgba(255,255,255,0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.header-badge { background: rgba(255,255,255,0.15); padding: 4px 12px; border-radius: 20px; font-size: 13px; }
+.date-selector { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+.date-selector:focus { outline: none; border-color: rgba(255,255,255,0.5); }
+
+.btn-range {
+  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+  color: #fff; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s;
+}
+.btn-range:hover { background: rgba(255,255,255,0.2); }
+.btn-range.active { background: var(--primary); border-color: var(--primary); }
+
+.nav {
+  background: var(--card-bg); border-bottom: 1px solid var(--border); padding: 0 32px;
+  display: flex; gap: 4px; position: sticky; top: 64px; z-index: 99;
+}
+.nav-item { padding: 14px 20px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; }
+.nav-item:hover { color: var(--primary); }
+.nav-item.active { color: var(--primary); border-bottom-color: var(--primary); background: var(--primary-light); }
+
+.main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+.page { display: none; }
+.page.active { display: block; }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: var(--card-bg); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); transition: box-shadow 0.2s; }
+.stat-card:hover { box-shadow: var(--shadow-md); }
+.stat-card .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
+.stat-card .value { font-size: 28px; font-weight: 700; }
+.stat-card .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.stat-card .value.primary { color: var(--primary); }
+.stat-card .value.success { color: var(--success); }
+.stat-card .value.warning { color: var(--warning); }
+.stat-card .value.danger { color: var(--danger); }
+
+.section { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 24px; overflow: hidden; }
+.section-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.section-header h3 { font-size: 16px; font-weight: 600; }
+.section-body { padding: 20px; }
+
+.chart-wrap { position: relative; height: 300px; }
+.chart-wrap canvas { width: 100% !important; }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: #f8fafc; padding: 10px 12px; text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid var(--border); white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+tr:hover td { background: #f8fafc; }
+td .grade { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.grade-excellent { background: #d1fae5; color: #065f46; }
+.grade-good { background: #dbeafe; color: #1e40af; }
+.grade-normal { background: #fef3c7; color: #92400e; }
+.grade-poor { background: #fee2e2; color: #991b1b; }
+.grade-bad { background: #fecaca; color: #7f1d1d; }
+
+.report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 768px) { .report-grid { grid-template-columns: 1fr; } }
+.report-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.report-card .agent-name { font-weight: 600; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.strength { color: var(--success); font-size: 13px; margin: 4px 0; }
+.weakness { color: var(--danger); font-size: 13px; margin: 4px 0; }
+.suggestion-box { background: #fefce8; border: 1px solid #fde68a; border-radius: 6px; padding: 10px 14px; margin-top: 10px; font-size: 13px; color: #92400e; }
+
+.loading { display: none; text-align: center; padding: 40px; color: var(--text-secondary); }
+.loading.show { display: block; }
+.spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+.empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+.empty-state h3 { font-size: 18px; margin-bottom: 8px; color: var(--text); }
+.empty-state p { font-size: 14px; max-width: 500px; margin: 0 auto 12px; }
+
+.toast { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 8px; color: #fff; font-size: 14px; z-index: 2000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: fadeInOut 3s ease forwards; }
+@keyframes fadeInOut { 0% { opacity: 0; transform: translateX(-50%) translateY(-10px); } 10% { opacity: 1; transform: translateX(-50%) translateY(0); } 90% { opacity: 1; } 100% { opacity: 0; } }
+
+.feature-item { font-size: 13px; color: var(--text-secondary); margin: 4px 0; padding-left: 16px; position: relative; }
+.feature-item::before { content: ''; position: absolute; left: 4px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--info); }
+
+.banner-bar { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
+.banner-info { background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; }
+.banner-warn { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; }
+.banner-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
+@media (max-width: 768px) {
+  .header { padding: 0 16px; }
+  .nav { padding: 0 12px; overflow-x: auto; }
+  .main { padding: 16px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <div class="header-logo">🐟</div>
+    <h1>七鱼客服数据看板</h1>
+  </div>
+  <div class="header-right">
+    <span class="header-badge" id="updateBadge">🕐 加载中...</span>
+    <select class="date-selector" id="datePicker" title="选择统计日期"></select>
+    <button class="btn-range" id="btnRange" onclick="toggleRange()">📅 单日</button>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <div class="nav-item active" data-page="dashboard">📊 数据总览</div>
+  <div class="nav-item" data-page="agents">👥 坐席绩效</div>
+  <div class="nav-item" data-page="report">📋 质量报告</div>
+  <div class="nav-item" data-page="about">ℹ️ 关于</div>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+
+  <!-- Dashboard Page -->
+  <div class="page active" id="page-dashboard">
+    <div class="loading" id="dashboard-loading"><div class="spinner"></div><div>正在加载数据...</div></div>
+    <div id="dashboard-content" style="display:none">
+      <div class="stats-grid" id="overview-cards"></div>
+      <div class="section">
+        <div class="section-header"><h3>核心指标图表</h3></div>
+        <div class="section-body"><div class="chart-wrap"><canvas id="dashboardChart"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agents Page -->
+  <div class="page" id="page-agents">
+    <div class="loading" id="agents-loading"><div class="spinner"></div><div>正在加载数据...</div></div>
+    <div id="agents-content" style="display:none">
+      <div class="stats-grid" id="agents-summary-cards"></div>
+      <div class="section">
+        <div class="section-header"><h3>坐席绩效明细</h3><span style="font-size:13px;color:var(--text-secondary)" id="agents-count"></span></div>
+        <div class="section-body">
+          <div class="table-wrap">
+            <table id="agents-table">
+              <thead>
+                <tr><th>排名</th><th>坐席</th><th>账号</th><th>接入量</th><th>有效会话</th><th>应答率</th><th>满意度</th><th>平均响应</th><th>首次响应</th><th>一次性解决率</th><th>参评率</th><th>综合评分</th><th>等级</th><th>上岗时间</th><th>下岗时间</th><th>在线时长</th><th>出勤天数</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-header"><h3>坐席评分分布</h3></div>
+        <div class="section-body"><div class="chart-wrap"><canvas id="agentsChart"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report Page -->
+  <div class="page" id="page-report">
+    <div class="loading" id="report-loading"><div class="spinner"></div><div>正在生成报告...</div></div>
+    <div id="report-content" style="display:none">
+      <div class="section">
+        <div class="section-header"><h3>📊 整体服务质量概览</h3></div>
+        <div class="section-body">
+          <div class="stats-grid" id="report-overview-cards"></div>
+          <div class="chart-wrap" style="height:250px;margin-top:16px"><canvas id="reportRadarChart"></canvas></div>
+        </div>
+      </div>
+      <div class="section" id="findings-section" style="display:none">
+        <div class="section-header"><h3>🔍 关键发现</h3></div>
+        <div class="section-body" id="findings-content"></div>
+      </div>
+      <div class="section" id="recommendations-section" style="display:none">
+        <div class="section-header"><h3>💡 改进建议</h3></div>
+        <div class="section-body" id="recommendations-content"></div>
+      </div>
+      <div class="section">
+        <div class="section-header"><h3>👥 坐席服务质量评价</h3></div>
+        <div class="section-body"><div class="report-grid" id="agent-evals-grid"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- About Page -->
+  <div class="page active" id="page-about" style="display:none">
+    <div class="section">
+      <div class="section-header"><h3>ℹ️ 关于本站</h3></div>
+      <div class="section-body">
+        <div class="banner-bar banner-info" style="margin-bottom:20px">
+          <strong>🔧 工作原理</strong><br>
+          本站数据由 GitHub Actions 在每天凌晨 2:00 自动调用七鱼开放平台 API 抓取，生成静态 JSON 文件后通过 GitHub Pages 提供服务。
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="background:#f8fafc;padding:16px;border-radius:8px">
+            <h4 style="margin-bottom:8px">📅 数据更新</h4>
+            <p style="font-size:13px;color:var(--text-secondary)">每日凌晨 2:05（北京时间）自动抓取前一天和当天的统计数据。手动触发更新请前往 GitHub 仓库的 Actions 页面。</p>
+          </div>
+          <div style="background:#f8fafc;padding:16px;border-radius:8px">
+            <h4 style="margin-bottom:8px">💬 会话分析</h4>
+            <p style="font-size:13px;color:var(--text-secondary)">批量会话导出需要企业开通七鱼「会话导出」API 权限。如需查看具体会话内容，请在七鱼管理后台查看。</p>
+          </div>
+          <div style="background:#f8fafc;padding:16px;border-radius:8px">
+            <h4 style="margin-bottom:8px">📊 数据范围</h4>
+            <p style="font-size:13px;color:var(--text-secondary)">本站展示的数据总览、坐席绩效、质量报告均来源于七鱼开放平台统计类 API。数据延迟约 1 天。</p>
+          </div>
+          <div style="background:#f8fafc;padding:16px;border-radius:8px">
+            <h4 style="margin-bottom:8px">🔐 安全性</h4>
+            <p style="font-size:13px;color:var(--text-secondary)">API 密钥存储在 GitHub Secrets 中，不会暴露在公开代码中。数据文件为公开只读。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ==================== 全局状态 ====================
+const DATA_BASE = 'data/';
+let currentDate = getYesterdayStr();
+let currentViewMode = 'day';
+let availableDates = [];
+let currentData = null;
+let dashboardChart = null;
+let agentsChart = null;
+let reportRadarChart = null;
+
+function getYesterdayStr() {
+  const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0];
+}
+
+// ==================== 工具函数 ====================
+function showToast(msg, type) {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type||'success'}`;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(function(){ toast.remove(); }, 3000);
+}
+
+function showLoading(name) {
+  document.getElementById(name + '-loading').classList.add('show');
+  var c = document.getElementById(name + '-content');
+  if (c) c.style.display = 'none';
+}
+function hideLoading(name) {
+  document.getElementById(name + '-loading').classList.remove('show');
+  var c = document.getElementById(name + '-content');
+  if (c) c.style.display = 'block';
+}
+
+function formatTime(ms) {
+  if (!ms || ms <= 0) return '-';
+  return new Date(ms).toLocaleString('zh-CN', { hour12: false });
+}
+
+function fmtRatio(v) {
+  if (v === null || v === undefined) return '-';
+  var n = parseFloat(v);
+  if (isNaN(n) || n < 0) return '-';
+  if (n <= 1.0) return (n * 100).toFixed(1) + '%';
+  return n.toFixed(1) + '%';
+}
+
+function fmtMs(ms) {
+  if (!ms || ms <= 0) return '-';
+  var s = ms / 1000;
+  if (s < 60) return s.toFixed(0) + '秒';
+  return (s / 60).toFixed(1) + '分';
+}
+
+function fmtTs(ts) {
+  if (!ts || ts <= 0) return '-';
+  var d = new Date(ts);
+  var pad = function(n){ return String(n).padStart(2,'0'); };
+  return pad(d.getMonth()+1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+
+function fmtDuration(ms) {
+  if (!ms || ms <= 0) return '-';
+  var totalSec = Math.floor(ms / 1000);
+  var h = Math.floor(totalSec / 3600);
+  var m = Math.floor((totalSec % 3600) / 60);
+  var s = totalSec % 60;
+  if (h > 0) return h + '时' + m + '分';
+  if (m > 0) return m + '分' + s + '秒';
+  return s + '秒';
+}
+
+function getGradeClass(grade) {
+  var map = { '优秀': 'grade-excellent', '良好': 'grade-good', '合格': 'grade-normal', '待改进': 'grade-poor', '不合格': 'grade-bad' };
+  return map[grade] || '';
+}
+
+function escapeHtml(text) {
+  var div = document.createElement('div');
+  div.textContent = text || '';
+  return div.innerHTML;
+}
+
+// ==================== 数据加载 ====================
+async function fetchDataFile(filename) {
+  try {
+    var resp = await fetch(DATA_BASE + filename);
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch(e) {
+    console.error('Failed to fetch ' + filename + ':', e);
+    return null;
+  }
+}
+
+async function loadLatest() {
+  return await fetchDataFile('latest.json');
+}
+
+async function loadDateData(date, isWeek) {
+  var filename = isWeek ? (date + '-week.json') : (date + '.json');
+  return await fetchDataFile(filename);
+}
+
+// ==================== 导航切换 ====================
+document.querySelectorAll('.nav-item').forEach(function(item) {
+  item.addEventListener('click', function() {
+    document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+    this.classList.add('active');
+    document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+    var pageId = 'page-' + this.dataset.page;
+    document.getElementById(pageId).classList.add('active');
+    loadPageData(this.dataset.page);
+  });
+});
+
+// ==================== 日期选择 ====================
+function toggleRange() {
+  var btn = document.getElementById('btnRange');
+  if (currentViewMode === 'day') {
+    currentViewMode = 'week';
+    btn.textContent = '📅 近一周';
+    btn.classList.add('active');
+  } else {
+    currentViewMode = 'day';
+    btn.textContent = '📅 单日';
+    btn.classList.remove('active');
+  }
+  loadAllData();
+}
+
+var datePicker = document.getElementById('datePicker');
+datePicker.addEventListener('change', function() {
+  currentDate = this.value;
+  loadAllData();
+});
+
+// ==================== 页面数据加载 ====================
+function loadPageData(page) {
+  switch (page) {
+    case 'dashboard': loadDashboard(); break;
+    case 'agents': loadAgents(); break;
+    case 'report': loadReport(); break;
+  }
+}
+
+async function loadAllData() {
+  if (currentViewMode === 'week') {
+    var weekData = await loadDateData(currentDate, true);
+    if (weekData) {
+      currentData = weekData;
+      var activePage = document.querySelector('.nav-item.active');
+      if (activePage) loadPageData(activePage.dataset.page);
+    } else {
+      showToast('该日期的周数据尚未生成，请等待凌晨自动抓取', 'error');
+    }
+  } else {
+    var dayData = await loadDateData(currentDate, false);
+    if (dayData) {
+      currentData = dayData;
+      var activePage = document.querySelector('.nav-item.active');
+      if (activePage) loadPageData(activePage.dataset.page);
+    } else {
+      showToast('该日期暂无数据，请选择其他日期', 'error');
+    }
+  }
+}
+
+// ==================== 1. 仪表盘 ====================
+function loadDashboard() {
+  if (!currentData) {
+    document.getElementById('dashboard-content').style.display = 'block';
+    document.getElementById('overview-cards').innerHTML =
+      '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3><p>请选择一个有数据的日期</p></div>';
+    return;
+  }
+  showLoading('dashboard');
+  var d = currentData.overview;
+  var cards = [
+    { label: '总会话量', value: d.totalSessions||0, cls: 'primary', sub: '有效会话 '+(d.effectiveSessions||0) },
+    { label: '总消息量', value: d.totalMessages||0, cls: 'primary', sub: '咨询量 '+(d.totalConsultCount||0) },
+    { label: '应答率', value: (d.answerRatio||0)+'%', cls: (d.answerRatio||0)>=85?'success':'warning' },
+    { label: '满意度', value: (d.satisfactionRatio||0)+'%', cls: (d.satisfactionRatio||0)>=80?'success':'warning' },
+    { label: '平均首次响应', value: fmtMs(d.avgFirstRespTime), cls: 'primary', sub: '平均响应 '+fmtMs(d.avgRespTime) },
+    { label: '一次性解决率', value: (d.oneOffRatio||0)+'%', cls: (d.oneOffRatio||0)>=60?'success':'warning' },
+    { label: '排队总量', value: d.queueCount||0, cls: (d.queueCount||0)>10?'warning':'success', sub: '最长排队 '+fmtMs((d.maxQueueTime||0)*1000) },
+    { label: '登录坐席', value: d.loginStaffCount||0, cls: 'primary', sub: '访问量 '+(d.visitCount||0) },
+  ];
+  document.getElementById('overview-cards').innerHTML = cards.map(function(c) {
+    return '<div class="stat-card"><div class="label">'+c.label+'</div><div class="value '+c.cls+'">'+c.value+'</div>'+(c.sub?'<div class="sub">'+c.sub+'</div>':'')+'</div>';
+  }).join('');
+
+  if (dashboardChart) dashboardChart.destroy();
+  var ctx = document.getElementById('dashboardChart').getContext('2d');
+  dashboardChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['总会话量','有效会话','应答率%','满意度%','一次性解决率%','参评率%'],
+      datasets: [{ label: d.date||currentDate, data: [d.totalSessions||0,d.effectiveSessions||0,d.answerRatio||0,d.satisfactionRatio||0,d.oneOffRatio||0,d.evaRatio||0], backgroundColor: ['#3b6df0','#10b981','#6366f1','#f59e0b','#14b8a6','#8b5cf6'], borderRadius: 6 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
+  hideLoading('dashboard');
+}
+
+// ==================== 2. 坐席绩效 ====================
+function loadAgents() {
+  if (!currentData || !currentData.agents) {
+    document.getElementById('agents-content').style.display = 'block';
+    document.getElementById('agents-summary-cards').innerHTML =
+      '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3></div>';
+    return;
+  }
+  showLoading('agents');
+  var agents = currentData.agents;
+  document.getElementById('agents-count').textContent = '共 ' + agents.length + ' 名坐席';
+
+  var totalIncoming = agents.reduce(function(s,a){ return s+(a.incomingSessions||0); }, 0);
+  var avgScore = agents.length>0 ? (agents.reduce(function(s,a){ return s+a.score; },0)/agents.length).toFixed(1) : 0;
+  var topAgent = agents.length>0 ? agents[0].name : '-';
+  var grades = {};
+  agents.forEach(function(a){ grades[a.grade] = (grades[a.grade]||0)+1; });
+
+  document.getElementById('agents-summary-cards').innerHTML =
+    '<div class="stat-card"><div class="label">坐席总数</div><div class="value primary">'+agents.length+'</div></div>'+
+    '<div class="stat-card"><div class="label">接入总量</div><div class="value primary">'+totalIncoming+'</div></div>'+
+    '<div class="stat-card"><div class="label">平均评分</div><div class="value '+(avgScore>=80?'success':'warning')+'">'+avgScore+'</div></div>'+
+    '<div class="stat-card"><div class="label">最佳坐席</div><div class="value success" style="font-size:20px">'+escapeHtml(topAgent)+'</div></div>';
+
+  var tbody = document.querySelector('#agents-table tbody');
+  tbody.innerHTML = agents.map(function(a,i){
+    return '<tr><td>'+(i+1)+'</td><td><strong>'+escapeHtml(a.name||'-')+'</strong></td><td>'+escapeHtml(a.account||'-')+'</td><td><strong>'+(a.incomingSessions||0)+'</strong></td><td>'+(a.validSessions||0)+'</td><td>'+fmtRatio(a.replyRatio)+'</td><td>'+fmtRatio(a.satisfactionRatio)+'</td><td>'+fmtMs(a.avgRespTime)+'</td><td>'+fmtMs(a.avgFirstRespTime)+'</td><td>'+fmtRatio(a.oneOffRatio)+'</td><td>'+fmtRatio(a.evaRatio)+'</td><td><strong style="color:var(--primary)">'+a.score+'</strong></td><td><span class="grade '+getGradeClass(a.grade)+'">'+a.grade+'</span></td><td style="font-size:12px">'+fmtTs(a.firstOnlineTime)+'</td><td style="font-size:12px">'+fmtTs(a.lastLogoutTime)+'</td><td>'+fmtDuration(a.onlineDuration)+'</td><td>'+(a.workDays||0)+'天</td></tr>';
+  }).join('');
+
+  if (agentsChart) agentsChart.destroy();
+  var ctx = document.getElementById('agentsChart').getContext('2d');
+  var gradeLabels = ['优秀','良好','合格','待改进','不合格'];
+  var gradeColors = ['#10b981','#3b6df0','#f59e0b','#f97316','#ef4444'];
+  agentsChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels: gradeLabels, datasets: [{ data: gradeLabels.map(function(g){ return grades[g]||0; }), backgroundColor: gradeColors, borderWidth: 2, borderColor: '#fff' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+  });
+  hideLoading('agents');
+}
+
+// ==================== 3. 质量报告 ====================
+function loadReport() {
+  if (!currentData || !currentData.report) {
+    document.getElementById('report-content').style.display = 'block';
+    document.getElementById('report-overview-cards').innerHTML =
+      '<div class="empty-state" style="grid-column:1/-1"><div class="icon">📭</div><h3>暂无数据</h3></div>';
+    return;
+  }
+  showLoading('report');
+  var report = currentData.report;
+  var overall = report.overall || {};
+  var scoreSummary = report.scoreSummary || {};
+
+  document.getElementById('report-overview-cards').innerHTML =
+    '<div class="stat-card"><div class="label">报告日期</div><div class="value primary" style="font-size:20px">'+report.reportDate+'</div><div class="sub">生成时间 '+report.generatedAt+'</div></div>'+
+    '<div class="stat-card"><div class="label">总咨询量</div><div class="value primary">'+(overall.totalSessions||0)+'</div><div class="sub">有效 '+(overall.effectiveSessions||0)+'</div></div>'+
+    '<div class="stat-card"><div class="label">整体应答率</div><div class="value '+((overall.answerRatio||0)>=85?'success':'warning')+'">'+(overall.answerRatio||0)+'%</div></div>'+
+    '<div class="stat-card"><div class="label">整体满意度</div><div class="value '+((overall.satisfactionRatio||0)>=80?'success':'warning')+'">'+(overall.satisfactionRatio||0)+'%</div></div>';
+
+  if (reportRadarChart) reportRadarChart.destroy();
+  var ctx = document.getElementById('reportRadarChart').getContext('2d');
+  reportRadarChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['应答率','满意度','一次性解决率','参评率','平均响应速度'],
+      datasets: [{ label: report.reportDate, data: [overall.answerRatio||0,overall.satisfactionRatio||0,overall.oneOffRatio||0,overall.evaRatio||0,Math.max(0,100-((overall.avgRespTime||0)/1000/30*10))], backgroundColor: 'rgba(59,109,240,0.15)', borderColor: '#3b6df0', borderWidth: 2, pointBackgroundColor: '#3b6df0' }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 100 } } }
+  });
+
+  var findingsSection = document.getElementById('findings-section');
+  if (report.keyFindings && report.keyFindings.length > 0) {
+    findingsSection.style.display = 'block';
+    document.getElementById('findings-content').innerHTML = report.keyFindings.map(function(f){ return '<div class="feature-item">🔎 '+f+'</div>'; }).join('');
+  } else { findingsSection.style.display = 'none'; }
+
+  var recSection = document.getElementById('recommendations-section');
+  if (report.recommendations && report.recommendations.length > 0) {
+    recSection.style.display = 'block';
+    document.getElementById('recommendations-content').innerHTML = report.recommendations.map(function(r){ return '<div class="feature-item">💡 '+r+'</div>'; }).join('');
+  } else { recSection.style.display = 'none'; }
+
+  var evals = report.agentEvaluations || [];
+  document.getElementById('agent-evals-grid').innerHTML = evals.map(function(agent){
+    return '<div class="report-card"><div class="agent-name"><span>'+escapeHtml(agent.name||'坐席#'+agent.id)+'</span><span class="grade '+getGradeClass(agent.grade)+'">'+agent.grade+' ('+agent.score+'分)</span></div><div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">接入 '+(agent.incomingSessions||0)+' 次 | 有效 '+(agent.validSessions||0)+' 次</div>'+
+      (agent.strengths||[]).map(function(s){ return '<div class="strength">✅ '+s+'</div>'; }).join('')+
+      (agent.weaknesses||[]).map(function(w){ return '<div class="weakness">⚠️ '+w+'</div>'; }).join('')+
+      (agent.suggestion ? '<div class="suggestion-box">📌 '+agent.suggestion+'</div>' : '')+
+      '</div>';
+  }).join('');
+
+  hideLoading('report');
+}
+
+// ==================== 初始化 ====================
+async function init() {
+  // 加载可用日期列表
+  var latest = await loadLatest();
+  if (latest) {
+    availableDates = latest.dates || [];
+    document.getElementById('updateBadge').textContent = '🕐 更新: '+ (latest.updatedAt||'未知');
+    // 填充日期选择器
+    var picker = document.getElementById('datePicker');
+    picker.innerHTML = availableDates.map(function(d){ return '<option value="'+d+'">'+d+'</option>'; }).join('');
+    // 默认选择最近一天
+    if (availableDates.length > 0) {
+      currentDate = availableDates[0];
+      picker.value = currentDate;
+    }
+  } else {
+    document.getElementById('updateBadge').textContent = '⚠️ 暂无数据';
+  }
+
+  // 尝试加载默认日期数据
+  if (availableDates.length > 0) {
+    currentData = await loadDateData(currentDate, false);
+    loadDashboard();
+  } else {
+    // 显示空状态
+    document.getElementById('dashboard-content').style.display = 'block';
+    document.getElementById('overview-cards').innerHTML =
+      '<div class="empty-state" style="grid-column:1/-1"><div class="icon">🔄</div><h3>等待数据生成</h3><p>数据将在每日凌晨 2:00 自动抓取。首次部署后，可前往 GitHub Actions 页面手动触发"每日数据抓取"工作流来立即生成数据。</p></div>';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# 后端配置文件（含 API 密钥，不能提交到公开仓库）
+backend/config.json
+*.pyc
+__pycache__/
+
+# 本地开发环境
+.workbuddy/
+*.db
+session_cache.db
+
+# 系统文件
+.DS_Store
+Thumbs.db
