@@ -115,6 +115,34 @@ body {
 }
 .date-selector:focus { outline: none; border-color: rgba(255,255,255,0.5); box-shadow: 0 0 0 3px rgba(99,102,241,0.3); }
 .date-selector::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+.btn-date-confirm {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.85);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+  letter-spacing: 1px;
+}
+.btn-date-confirm:hover {
+  background: rgba(255,255,255,0.22);
+  border-color: rgba(255,255,255,0.55);
+}
+.btn-date-confirm.pending {
+  background: rgba(99,102,241,0.45);
+  border-color: rgba(99,102,241,0.6);
+  color: #fff;
+  animation: pulseBtn 1.5s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(99,102,241,0.4);
+}
+@keyframes pulseBtn {
+  0%, 100% { box-shadow: 0 0 8px rgba(99,102,241,0.3); }
+  50% { box-shadow: 0 0 20px rgba(99,102,241,0.6); }
+}
 .date-range-sep {
   color: rgba(255,255,255,0.5);
   font-size: 13px;
@@ -660,6 +688,7 @@ td .grade {
     <input type="date" class="date-selector" id="datePicker" title="开始日期">
     <span class="date-range-sep">至</span>
     <input type="date" class="date-selector" id="datePickerEnd" title="结束日期">
+    <button class="btn-date-confirm" id="btnDateConfirm" title="确认查询">确认</button>
   </div>
 </div>
 
@@ -1032,7 +1061,7 @@ datePicker.addEventListener('change', function() {
     currentEndDate = currentDate;
     datePickerEnd.value = currentDate;
   }
-  loadAllData();
+  highlightConfirmBtn();
 });
 
 datePickerEnd.addEventListener('change', function() {
@@ -1042,8 +1071,20 @@ datePickerEnd.addEventListener('change', function() {
     currentDate = currentEndDate;
     datePicker.value = currentDate;
   }
+  highlightConfirmBtn();
+});
+
+// 确认按钮：用户点击后开始加载
+document.getElementById('btnDateConfirm').addEventListener('click', function() {
+  this.classList.remove('pending');
   loadAllData();
 });
+
+// 高亮确认按钮提示用户点击
+function highlightConfirmBtn() {
+  const btn = document.getElementById('btnDateConfirm');
+  btn.classList.add('pending');
+}
 
 // ==================== 配置 ====================
 

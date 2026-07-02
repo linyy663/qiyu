@@ -47,6 +47,10 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* ===== STATIC MODE BANNER ===== */
+.static-mode-banner { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #1a1a2e; text-align: center; padding: 8px 16px; font-size: 13px; font-weight: 600; display: none; }
+.static-mode-banner.show { display: block; }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background: var(--bg);
@@ -55,19 +59,6 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
-
-/* ===== STATIC MODE BANNER (GitHub Pages) ===== */
-.static-mode-banner {
-  background: linear-gradient(135deg, #fef3c7, #fffbeb);
-  color: #92400e;
-  padding: 8px 16px;
-  text-align: center;
-  font-size: 13px;
-  border-bottom: 1px solid #fde68a;
-  display: none;
-}
-.static-mode .static-mode-banner { display: block; }
-.static-mode .api-dependent { opacity: 0.5; pointer-events: none; }
 
 /* ===== HEADER ===== */
 .header {
@@ -128,6 +119,34 @@ body {
 }
 .date-selector:focus { outline: none; border-color: rgba(255,255,255,0.5); box-shadow: 0 0 0 3px rgba(99,102,241,0.3); }
 .date-selector::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+.btn-date-confirm {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.85);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+  letter-spacing: 1px;
+}
+.btn-date-confirm:hover {
+  background: rgba(255,255,255,0.22);
+  border-color: rgba(255,255,255,0.55);
+}
+.btn-date-confirm.pending {
+  background: rgba(99,102,241,0.45);
+  border-color: rgba(99,102,241,0.6);
+  color: #fff;
+  animation: pulseBtn 1.5s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(99,102,241,0.4);
+}
+@keyframes pulseBtn {
+  0%, 100% { box-shadow: 0 0 8px rgba(99,102,241,0.3); }
+  50% { box-shadow: 0 0 20px rgba(99,102,241,0.6); }
+}
 .date-range-sep {
   color: rgba(255,255,255,0.5);
   font-size: 13px;
@@ -661,9 +680,7 @@ td .grade {
 <body>
 
 <!-- Static Mode Banner -->
-<div class="static-mode-banner" id="static-mode-banner">
-  📦 当前为静态缓存模式 — 仅可查看已缓存的会话数据。完整功能请通过 Flask 后端访问。
-</div>
+<div class="static-mode-banner" id="staticModeBanner">⚠️ 静态模式：仅展示缓存会话数据。实时统计请通过 <code>http://localhost:5890</code> 访问。</div>
 
 <!-- Header -->
 <div class="header">
@@ -678,6 +695,7 @@ td .grade {
     <input type="date" class="date-selector" id="datePicker" title="开始日期">
     <span class="date-range-sep">至</span>
     <input type="date" class="date-selector" id="datePickerEnd" title="结束日期">
+    <button class="btn-date-confirm" id="btnDateConfirm" title="确认查询">确认</button>
   </div>
 </div>
 
@@ -916,7 +934,7 @@ td .grade {
 <script>
 // ==================== 全局状态 ====================
 const API_BASE = '';
-let isStaticMode = false;
+let isStaticMode = window.location.protocol === 'file:' || window.location.hostname !== 'localhost';
 let currentDate = getYesterdayStr();
 let dashboardChart = null;
 let agentsChart = null;
@@ -1051,7 +1069,7 @@ datePicker.addEventListener('change', function() {
     currentEndDate = currentDate;
     datePickerEnd.value = currentDate;
   }
-  loadAllData();
+  highlightConfirmBtn();
 });
 
 datePickerEnd.addEventListener('change', function() {
@@ -1061,8 +1079,20 @@ datePickerEnd.addEventListener('change', function() {
     currentDate = currentEndDate;
     datePicker.value = currentDate;
   }
+  highlightConfirmBtn();
+});
+
+// 确认按钮：用户点击后开始加载
+document.getElementById('btnDateConfirm').addEventListener('click', function() {
+  this.classList.remove('pending');
   loadAllData();
 });
+
+// 高亮确认按钮提示用户点击
+function highlightConfirmBtn() {
+  const btn = document.getElementById('btnDateConfirm');
+  btn.classList.add('pending');
+}
 
 // ==================== 配置 ====================
 
@@ -1599,18 +1629,11 @@ function fillAgentSelect(agents) {
 // ==================== 3. 会话分析 ====================
 
 async function loadSessionsPage() {
-  // 静态模式：切换到会话页面，只显示缓存状态
   if (isStaticMode) {
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    const sessionNav = document.querySelector('[data-page="sessions"]');
-    if (sessionNav) sessionNav.classList.add('active');
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.getElementById('page-sessions').classList.add('active');
     document.getElementById('sessions-content').style.display = 'block';
     checkCacheStatus();
     return;
   }
-
   // 优先使用缓存的坐席数据，没有则重新拉取（不重复打API）
   if (cachedAgents.length > 0) {
     fillAgentSelect(cachedAgents);
@@ -1633,29 +1656,7 @@ async function loadSessionsPage() {
 }
 
 async function checkCacheStatus() {
-  // 静态模式：检查本地 JSON 缓存文件是否存在
-  if (isStaticMode) {
-    const badge = document.getElementById('cache-status-badge');
-    if (!badge) return;
-    try {
-      const resp = await fetch(`data/latest.json`);
-      if (resp.ok) {
-        const latest = await resp.json();
-        const dates = latest.sessionDates || [];
-        if (dates.includes(currentDate)) {
-          badge.textContent = `✅ 缓存就绪`;
-        } else {
-          badge.textContent = '📦 无 ' + currentDate + ' 缓存';
-        }
-      } else {
-        badge.textContent = '📦 无缓存数据';
-      }
-    } catch (e) {
-      badge.textContent = '⚠️ 无法读取缓存';
-    }
-    return;
-  }
-
+  if (isStaticMode) return;
   const resp = await apiGet('/api/sessions/cache/status?date=' + currentDate);
   const badge = document.getElementById('cache-status-badge');
   const bar = document.getElementById('cache-status-bar');
@@ -1703,18 +1704,14 @@ async function loadAgentSessions() {
 
   showLoading('sessions');
 
-  // 静态模式：从缓存的 JSON 文件读取
   if (isStaticMode) {
-    const resp = await fetch(`data/sessions-${currentDate}.json`);
-    if (!resp.ok) {
-      hideLoading('sessions');
-      showToast('缓存数据不存在: ' + currentDate, 'error');
-      document.getElementById('sessions-list-section').style.display = 'none';
-      return;
-    }
-    const allData = await resp.json();
-    const sessions = (allData.sessions || []).filter(s => s.staffId == agentId);
-    renderSessionsList(sessions, `静态缓存 (${currentDate})`);
+    // 静态模式：从 data/ 目录加载缓存的 JSON
+    const date = currentDate;
+    const resp = await fetch(`data/sessions-${date}.json`);
+    if (!resp.ok) { showToast('静态模式下暂无该日期的缓存数据', 'error'); hideLoading('sessions'); return; }
+    const data = await resp.json();
+    const sessions = (data.sessions || []).filter(s => String(s.staffId) === String(agentId));
+    renderSessionsList(sessions, `数据来源：静态缓存 (${date})`);
     hideLoading('sessions');
     return;
   }
@@ -2054,13 +2051,12 @@ async function openSessionDetail(sessionId) {
   document.getElementById('session-modal-body').innerHTML = `
     <div class="loading show"><div class="spinner"></div><div>加载会话内容...</div></div>`;
 
-  // 静态模式下不支持会话详情（需要实时API）
   if (isStaticMode) {
     document.getElementById('session-modal-body').innerHTML = `
       <div class="empty-state">
-        <div class="icon">📦</div>
-        <h3>静态模式不支持会话详情</h3>
-        <p>会话详情需要实时的七鱼 API 接口。请通过 Flask 后端 localhost:5890 访问以查看详情。</p>
+        <div class="icon">📋</div>
+        <h3>静态模式</h3>
+        <p>会话详情接口仅在本地服务器模式下可用。请通过 <code>http://localhost:5890</code> 访问查看会话详情。</p>
       </div>`;
     return;
   }
@@ -2279,20 +2275,11 @@ function viewAgentSessions(agentId) {
 // ==================== 初始化 ====================
 
 async function init() {
-  // 检测是否为静态模式（GitHub Pages 或直接打开 HTML 文件）
-  if (window.location.protocol === 'file:' || !window.location.host.includes('localhost')) {
-    isStaticMode = true;
-    document.body.classList.add('static-mode');
-    document.getElementById('static-mode-banner').style.display = 'block';
-  }
-
   if (isStaticMode) {
-    // 静态模式：仅加载会话页面
-    document.getElementById('statusBadge').innerHTML = '<span class="status-dot unconfigured"></span>静态模式';
+    document.getElementById('staticModeBanner').classList.add('show');
     loadSessionsPage();
     return;
   }
-
   await checkConfig();
   loadDashboard();
 
