@@ -905,18 +905,18 @@ def generate_agent_summary(sessions: list, agent_id: int, date_str: str) -> dict
     merged_tags = {}
     unmapped = set(tag_freq.keys())
     for main_tag, aliases in tag_aliases.items():
-        total = 0
+        tag_total = 0
         for alias in aliases:
             if alias in tag_freq:
-                total += tag_freq[alias]
+                tag_total += tag_freq[alias]
                 unmapped.discard(alias)
             # 部分匹配
             for t in list(unmapped):
                 if alias in t:
-                    total += tag_freq[t]
+                    tag_total += tag_freq[t]
                     unmapped.discard(t)
-        if total > 0:
-            merged_tags[main_tag] = total
+        if tag_total > 0:
+            merged_tags[main_tag] = tag_total
     for t in unmapped:
         merged_tags[t] = tag_freq[t]
 
