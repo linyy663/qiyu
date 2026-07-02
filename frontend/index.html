@@ -491,11 +491,6 @@ td .grade {
   </div>
 </div>
 
-<!-- 仅在 GitHub Pages 访问时显示的提示横幅（本地Flask时自动隐藏） -->
-<div id="staticModeBanner" style="background:#fef3c7;border-bottom:1px solid #f59e0b;padding:8px 24px;font-size:13px;color:#92400e;text-align:center;display:none">
-  📊 <strong>实时统计/坐席绩效/质量报告</strong> 需在本地运行 Flask 服务后访问 &nbsp;|&nbsp; 本页面在线仅可查看 <strong>💬 客服会话记录</strong>（每日凌晨缓存）
-</div>
-
 <!-- Navigation -->
 <div class="nav">
   <div class="nav-item active" data-page="dashboard">📊 数据总览</div>
@@ -1219,20 +1214,9 @@ function fillAgentSelect(agents) {
     agents.map(a => `<option value="${a.id}">${escapeHtml(a.name || String(a.id))} (${escapeHtml(a.account || '')})</option>`).join('');
 }
 
-// 静态模式标记（无后端时为 true）
-let staticMode = false;
-// 静态模式下已加载的会话数据（按日期索引）
-let staticSessionData = {};
-
 // ==================== 3. 会话分析 ====================
 
 async function loadSessionsPage() {
-  if (staticMode) {
-    // 静态模式：从 data/latest.json 读取可用日期，再加载对应会话数据
-    await loadStaticSessionsPage();
-    return;
-  }
-
   // 优先使用缓存的坐席数据，没有则重新拉取（不重复打API）
   if (cachedAgents.length > 0) {
     fillAgentSelect(cachedAgents);
@@ -1254,58 +1238,7 @@ async function loadSessionsPage() {
   document.getElementById('sessions-content').style.display = 'block';
 }
 
-async function loadStaticSessionsPage() {
-  showLoading('sessions');
-  try {
-    const latestResp = await fetch('data/latest.json');
-    const latest = await latestResp.json();
-    const dates = latest.sessionDates || latest.dates || [];
-
-    if (dates.length === 0) {
-      hideLoading('sessions');
-      document.getElementById('sessions-content').style.display = 'block';
-      document.getElementById('cache-status-badge').textContent = '📦 暂无缓存数据';
-      document.getElementById('cache-status-bar').style.display = 'block';
-      document.getElementById('cache-status-msg').innerHTML = '暂无缓存的会话数据。会话数据每日凌晨 2:00 自动缓存。';
-      return;
-    }
-
-    // 加载最新一天的数据
-    const latestDate = dates[0];
-    const dataResp = await fetch('data/sessions-' + latestDate + '.json');
-    const sessionData = await dataResp.json();
-    const sessions = sessionData.sessions || [];
-
-    // 提取坐席列表
-    const agentMap = {};
-    sessions.forEach(s => {
-      if (s.staffId && !agentMap[s.staffId]) {
-        agentMap[s.staffId] = { id: s.staffId, name: s.staffName || ('坐席#' + s.staffId), account: '' };
-      }
-    });
-    const agents = Object.values(agentMap);
-    staticSessionData[latestDate] = sessions;
-
-    fillAgentSelect(agents);
-    document.getElementById('cache-status-badge').textContent = '✅ 缓存就绪 ' + latestDate + ' (' + sessions.length + '条)';
-    document.getElementById('cache-status-bar').style.display = 'none';
-
-    // 填充日期选择器
-    datePicker.value = latestDate;
-    datePickerEnd.value = latestDate;
-    currentDate = latestDate;
-    currentEndDate = latestDate;
-  } catch (e) {
-    document.getElementById('cache-status-badge').textContent = '⚠️ 加载失败';
-    document.getElementById('cache-status-bar').style.display = 'block';
-    document.getElementById('cache-status-msg').innerHTML = '加载会话缓存数据失败：' + e.message;
-  }
-  hideLoading('sessions');
-  document.getElementById('sessions-content').style.display = 'block';
-}
-
 async function checkCacheStatus() {
-  if (staticMode) return; // 静态模式已在 loadStaticSessionsPage 中处理
   const resp = await apiGet('/api/sessions/cache/status?date=' + currentDate);
   const badge = document.getElementById('cache-status-badge');
   const bar = document.getElementById('cache-status-bar');
@@ -1350,14 +1283,6 @@ async function checkCacheStatus() {
 async function loadAgentSessions() {
   const agentId = document.getElementById('session-agent-select').value;
   if (!agentId) { showToast('请先选择坐席', 'error'); return; }
-
-  // 静态模式：直接从本地缓存过滤
-  if (staticMode) {
-    const allSessions = staticSessionData[currentDate] || [];
-    const filtered = allSessions.filter(s => String(s.staffId) === String(agentId));
-    renderSessionsList(filtered, '本地缓存 ' + currentDate);
-    return;
-  }
 
   showLoading('sessions');
   // 优先使用缓存接口
@@ -1464,17 +1389,6 @@ async function openSessionDetail(sessionId) {
   document.getElementById('session-modal-title').textContent = `会话 #${sessionId}`;
   document.getElementById('session-modal-body').innerHTML = `
     <div class="loading show"><div class="spinner"></div><div>加载会话内容...</div></div>`;
-
-  // 静态模式：无法查看会话详情（需要后端解析）
-  if (staticMode) {
-    document.getElementById('session-modal-body').innerHTML = `
-      <div class="empty-state">
-        <div class="icon">ℹ️</div>
-        <h3>需要本地服务</h3>
-        <p>查看会话消息详情需要启动本地 Flask 服务（localhost:5890）后访问。<br>在 GitHub Pages 上仅支持查看会话列表。</p>
-      </div>`;
-    return;
-  }
 
   const resp = await apiGet(`/api/sessions/${sessionId}`);
 
@@ -1690,26 +1604,11 @@ function viewAgentSessions(agentId) {
 // ==================== 初始化 ====================
 
 async function init() {
-  // 检测是否有后端（GitHub Pages 静态访问时无后端）
-  const configResp = await apiGet('/api/config');
-  if (configResp.code === -1) {
-    // 无后端（GitHub Pages 静态模式）：显示横幅，直接进入会话页
-    staticMode = true;
-    document.getElementById('staticModeBanner').style.display = 'block';
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    const sessionsNav = document.querySelector('[data-page="sessions"]');
-    if (sessionsNav) sessionsNav.classList.add('active');
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const sessionsPage = document.getElementById('page-sessions');
-    if (sessionsPage) sessionsPage.classList.add('active');
-    loadSessionsPage();
-    return;
-  }
-
   await checkConfig();
   loadDashboard();
 
   // 如果未配置，自动弹出设置框
+  const configResp = await apiGet('/api/config');
   if (configResp.code === 200 && !configResp.data.configured) {
     setTimeout(() => openSettings(), 500);
   }
