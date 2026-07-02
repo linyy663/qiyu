@@ -494,10 +494,9 @@ td .grade {
 </head>
 <body>
 
-<!-- 静态模式横幅（GitHub Pages 无后端时显示） -->
-<div id="staticModeBanner" style="display:none;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;padding:12px 20px;border-radius:10px;margin-bottom:16px;font-size:14px;text-align:center">
-  💡 <strong>实时统计功能需要本地运行 Flask 后端</strong>&nbsp;&nbsp;
-  当前为静态模式，仅支持查看已缓存的会话数据。实时数据请访问 <code style="background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:4px">localhost:5890</code>
+<!-- 静态模式提示横幅 -->
+<div id="staticModeBanner" style="display:none;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:10px 24px;text-align:center;font-size:14px;color:#92400e">
+  ⚠️ 当前为静态模式（GitHub Pages）。实时数据统计请运行 <code style="background:#fde68a;padding:2px 6px;border-radius:4px">cd backend && python app.py</code> 后访问 <a href="http://localhost:5890" style="color:#0369a1;font-weight:bold">localhost:5890</a>
 </div>
 
 <!-- Header -->
@@ -614,6 +613,7 @@ td .grade {
             </select>
             <button class="btn btn-primary" onclick="loadAgentSessions()" style="margin-left:12px">查询会话</button>
             <button class="btn btn-accent" onclick="loadAgentSummary()" style="margin-left:8px" id="btn-agent-summary">📊 概括总结</button>
+            <button class="btn btn-accent" onclick="loadAgentSummaryDeep()" style="margin-left:8px" id="btn-agent-deep" title="分析实际会话内容">🔍 深度分析</button>
             <button class="btn btn-sm" onclick="triggerCacheRefresh()" style="margin-left:8px" id="btn-refresh-cache" title="手动触发缓存刷新">🔄 刷新缓存</button>
             <span style="font-size:12px;color:var(--text-secondary);margin-left:12px;display:block;margin-top:6px">
               💡 会话数据需凌晨2:00-6:00自动缓存（需企业开通批量导出权限）
@@ -752,7 +752,6 @@ td .grade {
 const API_BASE = '';
 let currentDate = getYesterdayStr();
 let staticMode = false;
-let staticAllSessions = []; // 静态模式下加载的所有会话数据
 let dashboardChart = null;
 let agentsChart = null;
 let reportRadarChart = null;
@@ -1255,46 +1254,47 @@ function fillAgentSelect(agents) {
 // ==================== 3. 会话分析 ====================
 
 async function loadSessionsPage() {
+  // 查看缓存状态（优先使用后端接口）
+  checkCacheStatus();
+
   if (staticMode) {
-    // 静态模式：从 data/sessions-*.json 加载数据
-    showLoading('sessions');
+    // 静态模式：直接从 data/latest.json 拉取缓存日期信息
     try {
-      const resp = await fetch(`data/latest.json?t=${Date.now()}`);
-      const latest = await resp.json();
+      const latestResp = await fetch('data/latest.json?' + Date.now());
+      const latest = await latestResp.json();
       const dates = latest.sessionDates || [];
-      if (dates.length === 0) {
-        hideLoading('sessions');
-        document.getElementById('sessions-content').style.display = 'block';
-        return;
+      if (dates.length > 0) {
+        showToast('缓存日期: ' + dates.join(', '));
+        // 自动选最近日期
+        currentDate = dates[dates.length - 1];
+        document.getElementById('session-date').value = currentDate;
       }
-      const targetDate = dates[0];
-      currentDate = targetDate;
-      const sResp = await fetch(`data/sessions-${targetDate}.json?t=${Date.now()}`);
-      const sData = await sResp.json();
-      staticAllSessions = sData.sessions || [];
-      // 从会话中提取坐席列表
-      const agentMap = {};
-      for (const s of staticAllSessions) {
-        const sid = s.staffId || 0;
-        if (sid && !agentMap[sid]) {
-          agentMap[sid] = { id: sid, name: s.staffName || `坐席${sid}` };
+      // 从缓存数据提取坐席列表
+      if (dates.length > 0 && cachedAgents.length === 0) {
+        const lastDate = dates[dates.length - 1];
+        const dataResp = await fetch('data/sessions-' + lastDate + '.json?' + Date.now());
+        const data = await dataResp.json();
+        const sessions = data.sessions || data || [];
+        const agentMap = {};
+        for (const s of sessions) {
+          const sid = s.staffId;
+          const name = s.staffName || '';
+          if (sid && !agentMap[sid]) {
+            agentMap[sid] = { id: sid, name: name, account: name };
+          }
         }
+        cachedAgents = Object.values(agentMap);
+        fillAgentSelect(cachedAgents);
       }
-      cachedAgents = Object.values(agentMap);
-      fillAgentSelect(cachedAgents);
-      // 显示缓存日期
-      const badge = document.getElementById('cache-status-badge');
-      badge.textContent = `✅ 静态缓存就绪 (${staticAllSessions.length}条 · ${targetDate})`;
-      document.getElementById('cache-status-bar').style.display = 'none';
     } catch (e) {
-      showToast('加载静态缓存数据失败: ' + e.message, 'error');
+      showToast('加载缓存数据失败: ' + e.message, 'warn');
     }
     hideLoading('sessions');
     document.getElementById('sessions-content').style.display = 'block';
     return;
   }
 
-  // 优先使用缓存的坐席数据，没有则重新拉取（不重复打API）
+  // 优先使用缓存的坐席数据
   if (cachedAgents.length > 0) {
     fillAgentSelect(cachedAgents);
   } else {
@@ -1309,8 +1309,6 @@ async function loadSessionsPage() {
     }
   }
 
-  // 检查缓存状态
-  checkCacheStatus();
   hideLoading('sessions');
   document.getElementById('sessions-content').style.display = 'block';
 }
@@ -1362,9 +1360,19 @@ async function loadAgentSessions() {
   if (!agentId) { showToast('请先选择坐席', 'error'); return; }
 
   if (staticMode) {
-    // 静态模式：从内存中过滤
-    const filtered = staticAllSessions.filter(s => String(s.staffId || 0) === String(agentId));
-    renderSessionsList(filtered, `静态数据 (${currentDate})`);
+    // 静态模式：从本地 data/ JSON 文件过滤
+    showLoading('sessions');
+    try {
+      const dataResp = await fetch('data/sessions-' + currentDate + '.json?' + Date.now());
+      const data = await dataResp.json();
+      const sessions = data.sessions || data || [];
+      const filtered = sessions.filter(s => String(s.staffId) === String(agentId));
+      hideLoading('sessions');
+      renderSessionsList(filtered, '数据来源：本地缓存');
+    } catch (e) {
+      hideLoading('sessions');
+      showToast('加载缓存数据失败: ' + e.message, 'error');
+    }
     return;
   }
 
@@ -1406,19 +1414,24 @@ async function loadAgentSessions() {
   renderSessionsList(data.sessions || [], sourceTag);
 }
 
-async function loadAgentSummary() {
+async function loadAgentSummary() { loadAgentSummaryCore(false); }
+async function loadAgentSummaryDeep() { loadAgentSummaryCore(true); }
+
+async function loadAgentSummaryCore(deep) {
   const agentId = document.getElementById('session-agent-select').value;
   if (!agentId) { showToast('请先选择坐席', 'error'); return; }
 
-  const btn = document.getElementById('btn-agent-summary');
+  const btnId = deep ? 'btn-agent-deep' : 'btn-agent-summary';
+  const btn = document.getElementById(btnId);
   btn.disabled = true;
-  btn.textContent = '⏳ 生成中...';
-  showToast('正在生成坐席概括总结...');
+  btn.textContent = deep ? '⏳ 深度分析中...' : '⏳ 生成中...';
+  showToast(deep ? '正在获取会话消息进行深度分析...' : '正在生成坐席概括总结...');
 
   try {
-    const resp = await apiGet(`/api/sessions/agent/${agentId}/summary?date=${currentDate}`);
+    const url = `/api/sessions/agent/${agentId}/summary?date=${currentDate}` + (deep ? '&deep=true' : '');
+    const resp = await apiGet(url);
     btn.disabled = false;
-    btn.textContent = '📊 概括总结';
+    btn.textContent = deep ? '🔍 深度分析' : '📊 概括总结';
 
     if (resp.code !== 200) {
       showToast(resp.message || '生成总结失败', 'error');
@@ -1495,13 +1508,70 @@ async function loadAgentSummary() {
       html += '</div>';
     }
 
+    // ---- 深度分析内容 ----
+    if (d.deepAnalysis) {
+      const da = d.deepAnalysis;
+      html += '<h4 style="font-size:14px;color:#7c3aed;margin:16px 0 8px">🔬 会话内容分析（采样 ' + (da.analyzedCount || 0) + ' 条会话消息）</h4>';
+
+      // 常见问题
+      if (da.commonIssues && da.commonIssues.length > 0) {
+        html += '<h5 style="font-size:13px;color:var(--text-primary);margin:10px 0 6px">📋 涉及问题类型</h5>';
+        html += '<div class="topic-bars">';
+        const maxI = da.commonIssues[0].count;
+        for (const iss of da.commonIssues) {
+          const pct = maxI > 0 ? Math.round(iss.count / maxI * 100) : 0;
+          html += `<div class="topic-bar"><span class="topic-name">${escapeHtml(iss.issue)}</span><span class="topic-fill" style="width:${pct}%;background:linear-gradient(90deg,#7c3aed,#a78bfa)"></span><span class="topic-count">${iss.count}次</span></div>`;
+        }
+        html += '</div>';
+      }
+
+      // 高频短语
+      if (da.topPhrases && da.topPhrases.length > 0) {
+        html += '<h5 style="font-size:13px;color:var(--text-primary);margin:10px 0 6px">💬 用户高频表达</h5>';
+        html += '<div class="agent-summary-flags">';
+        html += da.topPhrases.map(p => `<span class="flag" style="background:#fdf4ff;color:#86198f;border-color:#e9d5ff">${escapeHtml(p.phrase)} ×${p.count}</span>`).join('');
+        html += '</div>';
+      }
+
+      // 用户情绪/诉求
+      if (da.userComplaints && da.userComplaints.length > 0) {
+        html += '<h5 style="font-size:13px;color:var(--text-primary);margin:10px 0 6px">😟 用户情绪倾向</h5>';
+        html += '<div class="agent-summary-flags">';
+        html += da.userComplaints.map(c => `<span class="flag" style="background:#fff7ed;color:#c2410c;border-color:#fed7aa">${escapeHtml(c)}</span>`).join('');
+        html += '</div>';
+      }
+
+      // 会话样本
+      if (da.sampleSessions && da.sampleSessions.length > 0) {
+        html += '<h5 style="font-size:13px;color:var(--text-primary);margin:10px 0 6px">📝 典型会话摘要</h5>';
+        for (const ss of da.sampleSessions) {
+          const resolvedLabel = ss.resolved ? '<span style="color:#16a34a">✓ 已解决</span>' : '<span style="color:#dc2626">✗ 未解决</span>';
+          html += `<div class="summary-card" style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <strong>${escapeHtml(ss.category)}</strong>
+              <small>${resolvedLabel} &nbsp; 消息:${ss.msgCount} &nbsp; 用户:${ss.userMsgCount}条/客服:${ss.staffMsgCount}条</small>
+            </div>
+            <p style="margin:6px 0 0;font-size:13px;color:var(--text-secondary)">${escapeHtml(ss.userSample)}</p>
+          </div>`;
+        }
+      }
+    }
+
+    // ---- 细粒度问题标签（从 categoryDetail 提取）----
+    if (s.topTags && s.topTags.length > 0) {
+      html += '<h4 style="font-size:13px;color:var(--text-primary);margin:16px 0 6px">🏷️ 细粒度问题标签</h4>';
+      html += '<div class="agent-summary-flags">';
+      html += s.topTags.map(t => `<span class="flag" style="background:#f0f9ff;color:#0369a1;border-color:#bae6fd">${escapeHtml(t.tag)} ×${t.count}</span>`).join('');
+      html += '</div>';
+    }
+
     body.innerHTML = html;
     section.style.display = 'block';
     section.scrollIntoView({ behavior: 'smooth' });
 
   } catch (e) {
     btn.disabled = false;
-    btn.textContent = '📊 概括总结';
+    btn.textContent = deep ? '🔍 深度分析' : '📊 概括总结';
     showToast('网络请求失败: ' + e.message, 'error');
   }
 }
@@ -1586,37 +1656,32 @@ async function openSessionDetail(sessionId) {
     <div class="loading show"><div class="spinner"></div><div>加载会话内容...</div></div>`;
 
   if (staticMode) {
-    // 静态模式：从缓存中查找会话元数据
-    const s = staticAllSessions.find(s => s.id === parseInt(sessionId));
-    if (!s) {
+    // 静态模式：从本地缓存查找会话元数据展示
+    try {
+      const dataResp = await fetch('data/sessions-' + currentDate + '.json?' + Date.now());
+      const data = await dataResp.json();
+      const sessions = data.sessions || data || [];
+      const session = sessions.find(s => String(s.id) === String(sessionId));
+      if (!session) {
+        document.getElementById('session-modal-body').innerHTML = `
+          <div class="empty-state"><div class="icon">❌</div><h3>未找到会话</h3><p>缓存中没有该会话数据</p></div>`;
+        return;
+      }
+      let html = '<div style="padding:16px">';
+      html += `<p><strong>分类：</strong>${escapeHtml(session.category || '未知')} / ${escapeHtml(session.categoryDetail || '')}</p>`;
+      html += `<p><strong>坐席：</strong>${escapeHtml(session.staffName || '')}</p>`;
+      html += `<p><strong>状态：</strong>${session.status === 1 ? '已解决' : '未解决'}</p>`;
+      html += `<p><strong>有效期：</strong>${session.isValid === 1 ? '有效' : '无效'}</p>`;
+      html += `<p><strong>开始时间：</strong>${session.startTime ? new Date(session.startTime).toLocaleString() : '-'}</p>`;
+      html += `<p><strong>时长：</strong>${Math.round((session.sessionDuration || 0) / 1000)}秒</p>`;
+      html += `<p><strong>消息数：</strong>客服${session.staffMessageCount || 0}条 / 访客${session.userMessageCount || 0}条</p>`;
+      html += `<p style="margin-top:12px;color:var(--text-secondary);font-size:13px">⚠️ 静态模式下不支持查看消息详情，请本地运行 Flask 后端</p>`;
+      html += '</div>';
+      document.getElementById('session-modal-body').innerHTML = html;
+    } catch (e) {
       document.getElementById('session-modal-body').innerHTML = `
-        <div class="empty-state"><div class="icon">❌</div><h3>未找到</h3><p>会话 ${sessionId} 不在当前缓存中</p></div>`;
-      return;
+        <div class="empty-state"><div class="icon">❌</div><h3>加载失败</h3><p>${escapeHtml(e.message)}</p></div>`;
     }
-    const stypeMap = {0:'正常',1:'留言',2:'留言',3:'超时'};
-    const statusMap = {0:'未解决',1:'已解决',2:'解决中'};
-    const evalMap = {5:'非常满意',4:'满意',3:'一般',2:'不满意',1:'非常不满意'};
-    const evalScore = s.evaluation || 0;
-    document.getElementById('session-modal-body').innerHTML = `
-      <div class="summary-card">
-        <h4>📋 会话概要</h4>
-        <p style="font-size:14px;margin-bottom:8px">
-          类型: ${stypeMap[s.sType] || '未知'} | 状态: ${statusMap[s.status] || '未知'} | ${evalScore > 0 ? '评价: ' + (evalMap[evalScore] || evalScore) : '未评价'}
-        </p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
-          <div>访客: ${escapeHtml(s.userName || '-')} (${s.userId || '-'})</div>
-          <div>IP城市: ${s.userIpCity || '-'}</div>
-          <div>开始: ${formatTime(s.startTime)}</div>
-          <div>分类: ${escapeHtml(s.category || '-')}</div>
-          <div>客服消息: ${s.staffMessageCount || 0}条</div>
-          <div>访客消息: ${s.userMessageCount || 0}条</div>
-          <div>来源页: ${escapeHtml((s.fromPage || '').substring(0, 60))}</div>
-          <div>进入原因: ${escapeHtml(s.startReason || '-')}</div>
-        </div>
-        ${s.transferHumanFailReason ? `<div style="font-size:13px;margin-top:8px;color:#dc2626">⚠️ ${escapeHtml(s.transferHumanFailReason)}</div>` : ''}
-        ${s.description ? `<div style="font-size:13px;margin-top:4px">描述: ${escapeHtml(s.description)}</div>` : ''}
-      </div>
-      <div class="empty-state"><div class="icon">💡</div><h3>静态模式下仅展示概要信息</h3><p>完整的会话消息内容需要连接 Flask 后端实时查询七鱼 API</p></div>`;
     return;
   }
 
@@ -1834,24 +1899,14 @@ function viewAgentSessions(agentId) {
 // ==================== 初始化 ====================
 
 async function init() {
-  // 检测是否有后端
-  try {
-    const configResp = await apiGet('/api/config');
-    if (configResp.code === -1 || (configResp.code !== 200)) {
-      throw new Error('no backend');
-    }
-    // 有后端，正常初始化
-    await checkConfig();
-    loadDashboard();
-    // 如未配置，自动弹出设置框
-    if (configResp.code === 200 && !configResp.data.configured) {
-      setTimeout(() => openSettings(), 500);
-    }
-  } catch (e) {
-    // 无后端：静态模式
+  const configResp = await apiGet('/api/config');
+  if (configResp.code === -1) {
+    // 无后端：显示静态模式横幅，直接进入会话页
     staticMode = true;
     document.getElementById('staticModeBanner').style.display = 'block';
-    // 直接跳转到会话页
+    // 隐藏 Header 设置按钮（在静态模式下不可用）
+    const settingsBtn = document.getElementById('btn-settings');
+    if (settingsBtn) settingsBtn.style.display = 'none';
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     const sessionsNav = document.querySelector('[data-page="sessions"]');
     if (sessionsNav) sessionsNav.classList.add('active');
@@ -1859,6 +1914,15 @@ async function init() {
     const sessionsPage = document.getElementById('page-sessions');
     if (sessionsPage) sessionsPage.classList.add('active');
     loadSessionsPage();
+    return;
+  }
+
+  await checkConfig();
+  loadDashboard();
+
+  // 如果未配置，自动弹出设置框
+  if (configResp.code === 200 && !configResp.data.configured) {
+    setTimeout(() => openSettings(), 500);
   }
 }
 

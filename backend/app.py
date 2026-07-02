@@ -5,6 +5,9 @@
 import datetime
 import json
 import sys
+import time as time_mod
+import re
+from collections import Counter
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from config_manager import load_config, save_config, get_config_status
@@ -700,10 +703,11 @@ def api_cached_sessions():
 
 @app.route('/api/sessions/agent/<int:agent_id>/summary', methods=['GET'])
 def api_agent_summary(agent_id):
-    """生成指定坐席的会话概括总结"""
+    """生成指定坐席的会话概括总结，支持 deep 模式获取实际消息内容"""
     date_str = request.args.get('date')
     if not date_str:
         date_str = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+    deep = request.args.get('deep', 'false').lower() == 'true'
 
     # 从缓存获取该坐席所有会话
     result = get_cached_sessions(date_str, agent_id)
@@ -721,7 +725,30 @@ def api_agent_summary(agent_id):
             "data": {"summary": "该坐席在 {date_str} 没有会话记录".format(date_str=date_str), "stats": {}, "topics": []}
         })
 
+    # 基础元数据分析（总是执行）
     summary_data = generate_agent_summary(sessions, agent_id, date_str)
+
+    # 深度分析：采样会话获取消息内容
+    if deep:
+        api = QiyuAPI()
+        if api.app_key and api.app_secret:
+            deep_data = analyze_agent_content_deeply(sessions, agent_id, api)
+            if deep_data:
+                summary_data['deepAnalysis'] = deep_data
+                # 将内容发现融入总结文本
+                deep_parts = []
+                if deep_data.get('commonIssues'):
+                    issues_text = '、'.join([i['issue'] for i in deep_data['commonIssues'][:5]])
+                    deep_parts.append(f"会话内容涉及的常见问题包括：{issues_text}")
+                if deep_data.get('userComplaints'):
+                    complaints_text = '、'.join(deep_data['userComplaints'][:3])
+                    deep_parts.append(f"用户高频反馈：{complaints_text}")
+                if deep_data.get('resolutionPatterns'):
+                    patterns_text = '、'.join(deep_data['resolutionPatterns'][:3])
+                    deep_parts.append(f"常见解决方案：{patterns_text}")
+                if deep_parts:
+                    summary_data['summary'] += "\\n\\n📝 **会话内容分析**：" + "；".join(deep_parts) + "。"
+
     return jsonify({"code": 200, "data": summary_data})
 
 
@@ -835,6 +862,47 @@ def generate_agent_summary(sessions: list, agent_id: int, date_str: str) -> dict
                 keyword_freq[keyword] = keyword_freq.get(keyword, 0) + 1
     top_keywords = sorted(keyword_freq.items(), key=lambda x: -x[1])[:8]
 
+    # ---- 细粒度问题标签（从 categoryDetail 拆分）----
+    tag_freq = {}
+    for s in sessions:
+        detail = s.get('categoryDetail', '') or ''
+        if detail:
+            # categoryDetail 格式如 "新城堡4 / 游戏攻略 / 据点查询"
+            tags = [t.strip() for t in detail.split('/') if t.strip()]
+            for tag in tags:
+                if len(tag) >= 2:
+                    tag_freq[tag] = tag_freq.get(tag, 0) + 1
+
+    # 合并相似标签
+    tag_aliases = {
+        '账号问题': ['账号', '账号查询', '账号找回', '账号注销', '账号换绑'],
+        '游戏攻略': ['游戏攻略', '攻略', '玩法'],
+        '充值问题': ['充值', '充值问题', '付费'],
+        'BUG反馈': ['BUG', 'BUG反馈', 'bug'],
+        '数据异常': ['数据查询', '数据问题'],
+        '账号注册': ['账号注册', '注册', '绑定失败'],
+        '举报投诉': ['举报', '投诉', '举报投诉'],
+    }
+    merged_tags = {}
+    unmapped = set(tag_freq.keys())
+    for main_tag, aliases in tag_aliases.items():
+        total = 0
+        for alias in aliases:
+            if alias in tag_freq:
+                total += tag_freq[alias]
+                unmapped.discard(alias)
+            # 部分匹配
+            for t in list(unmapped):
+                if alias in t:
+                    total += tag_freq[t]
+                    unmapped.discard(t)
+        if total > 0:
+            merged_tags[main_tag] = total
+    for t in unmapped:
+        merged_tags[t] = tag_freq[t]
+
+    top_tags = sorted(merged_tags.items(), key=lambda x: -x[1])[:12]
+
     # ---- 生成自然语言总结 ----
     parts = []
 
@@ -873,10 +941,15 @@ def generate_agent_summary(sessions: list, agent_id: int, date_str: str) -> dict
         peak_text = '、'.join([f"{h}:00-{h+1}:00（{c}通）" for h, c in peak_hours])
         parts.append(f"高峰时段集中在 {peak_text}")
 
-    # 主要问题类型
+    # 主要问题类型（优先使用细粒度标签）
     if merged_cats:
         top_cat_text = '、'.join([f"{cat}（{cnt}通）" for cat, cnt in list(merged_cats.items())[:5]])
         parts.append(f"主要问题类型：{top_cat_text}")
+
+    # 细粒度问题标签
+    if top_tags:
+        top_tag_text = '、'.join([f"{tag}（{cnt}次）" for tag, cnt in top_tags[:6]])
+        parts.append(f"高频问题标签：{top_tag_text}")
 
     # 突出问题
     flags = []
@@ -920,7 +993,196 @@ def generate_agent_summary(sessions: list, agent_id: int, date_str: str) -> dict
             "topCategories": [{"name": c, "count": n} for c, n in list(merged_cats.items())[:8]],
             "peakHours": [{"hour": h, "count": c} for h, c in peak_hours[:6]],
             "topKeywords": [{"keyword": k, "count": c} for k, c in top_keywords],
+            "topTags": [{"tag": t, "count": c} for t, c in top_tags[:12]],
         }
+    }
+
+
+def analyze_agent_content_deeply(sessions: list, agent_id: int, api) -> dict:
+    """采样坐席的会话，获取消息内容进行深度分析"""
+    import time as time_mod
+    import re
+    from collections import Counter
+
+    # 选择代表性样本：优先选有分类的、有消息的、已解决的
+    scored = []
+    for s in sessions:
+        score = 0
+        if s.get('category') and s.get('category') not in ('未知', '未分类'):
+            score += 3
+        msg_count = (s.get('staffMessageCount', 0) or 0) + (s.get('userMessageCount', 0) or 0)
+        if msg_count > 5:
+            score += min(msg_count // 5, 5)  # 消息多 => 含金量高
+        if s.get('isValid') == 1:
+            score += 2
+        if s.get('status') == 1:  # 已解决
+            score += 1
+        scored.append((score, s))
+
+    # 按得分排序，取前8条 + 随机2条作为样本
+    scored.sort(key=lambda x: -x[0])
+    sample_sessions = [s for _, s in scored[:8]]
+    # 额外加2条低分样本以覆盖多样性
+    if len(scored) > 8:
+        low_scored = scored[8:]
+        # 每隔N条取1条
+        step = max(1, len(low_scored) // 2)
+        for i in range(0, len(low_scored), step):
+            if len(sample_sessions) >= 10:
+                break
+            sample_sessions.append(low_scored[i][1])
+
+    all_user_msgs = []  # 用户消息内容
+    all_session_summaries = []  # 每个会话的简短摘要
+    analyzed_count = 0
+
+    for s in sample_sessions:
+        sid = s.get('id')
+        if not sid:
+            continue
+        try:
+            time_mod.sleep(0.5)  # 控制 API 频率
+            msg_result = api.get_session_messages(sid)
+            if msg_result.get('code') != 200:
+                continue
+
+            messages = msg_result.get('data', [])
+            if not messages:
+                continue
+
+            analyzed_count += 1
+
+            # 提取用户消息（from=1 是访客）
+            user_msgs = [m.get('msg', '') for m in messages
+                        if m.get('from') == 1 and isinstance(m.get('msg'), str) and len(m.get('msg', '').strip()) > 2]
+            if user_msgs:
+                all_user_msgs.extend(user_msgs)
+
+            # 提取客服消息用作解决模式分析
+            staff_msgs = [m.get('msg', '') for m in messages
+                         if m.get('from') != 1 and isinstance(m.get('msg'), str) and len(m.get('msg', '').strip()) > 5]
+
+            # 为该会话生成简短摘要
+            user_text = ' '.join(user_msgs[:3])[:150]  # 前3条用户消息
+            cat = s.get('category', '') or ''
+            cd = s.get('categoryDetail', '') or ''
+            cat_text = f"{cat} - {cd}" if cat and cat not in ('未知', '未分类') else '未分类'
+            all_session_summaries.append({
+                "sessionId": sid,
+                "category": cat_text,
+                "userSample": user_text if user_text else '（无文本消息）',
+                "msgCount": len(messages),
+                "userMsgCount": len(user_msgs),
+                "staffMsgCount": len(staff_msgs),
+                "resolved": s.get('status') == 1
+            })
+
+        except Exception:
+            continue
+
+    if analyzed_count == 0:
+        return None
+
+    # ---- 分析用户消息，提取常见问题 ----
+    # 使用关键词匹配识别问题类型
+    issue_patterns = [
+        ("账号找回/换绑", ['账号找', '密码', '换绑', '绑定', '手机号', '验证码', '注销']),
+        ("充值/付费问题", ['充值', '付费', '扣款', '支付', '退款', '购买', '订单']),
+        ("游戏攻略/玩法咨询", ['攻略', '怎么玩', '怎么打', '怎么过', '教程', '新手', '指南', '技巧']),
+        ("数据/道具问题", ['数据', '道具', '装备', '角色', '丢失', '没收到', '不见了', '消失']),
+        ("BUG/异常反馈", ['bug', '错误', '异常', '闪退', '卡', '掉线', '无法', '报错', '白屏', '黑屏']),
+        ("举报/投诉", ['举报', '投诉', '外挂', '作弊', '挂机', '骂人']),
+        ("活动/福利咨询", ['活动', '福利', '奖励', '领取', '兑换', '礼包', '码']),
+        ("登录/启动问题", ['登录', '登不上', '进不去', '启动', '闪退', '黑屏', '更新']),
+        ("功能使用咨询", ['怎么', '在哪里', '如何', '设置', '功能', '按钮', '界面']),
+        ("账号安全/被封", ['封号', '封禁', '被盗', '安全', '异地', '盗号']),
+    ]
+
+    issue_matches = {}
+    for msg in all_user_msgs:
+        for issue_name, patterns in issue_patterns:
+            for pat in patterns:
+                if pat.lower() in msg.lower():
+                    issue_matches[issue_name] = issue_matches.get(issue_name, 0) + 1
+                    break
+
+    common_issues = [
+        {"issue": name, "count": cnt}
+        for name, cnt in sorted(issue_matches.items(), key=lambda x: -x[1])[:8]
+    ]
+
+    # ---- 提取用户高频词汇/短语 ----
+    # 简单分词（按中文标点拆分）
+    all_text = ' '.join(all_user_msgs)
+    # 提取2-4字短语
+    phrases = Counter()
+    for msg in all_user_msgs:
+        # 提取关键短句
+        for phrase in ['转人工', '在吗', '你好', '谢谢', '等一下', '没有人', '没有用',
+                       '出问题了', '打不开', '怎么办', '为什么', '帮我', '解决',
+                       '充了钱', '没收到', '找不到', '进不去', '卡住了',
+                       '闪退', '黑屏', '更新不了', '绑定失败']:
+            if phrase in msg:
+                phrases[phrase] += 1
+    top_phrases = [{"phrase": p, "count": c} for p, c in phrases.most_common(10)]
+
+    # ---- 识别用户情绪/诉求模式 ----
+    complaints = []
+    negative_patterns = [
+        ('用户表达不满', ['不满意', '差评', '投诉', '什么垃圾', '坑', '骗', '怎么这样']),
+        ('用户催促回复', ['快点', '能不能快点', '等了很久', '怎么还没好']),
+        ('用户要求赔偿', ['赔偿', '补偿', '还我', '退钱', '退款']),
+        ('用户困惑/无助', ['不知道', '不会弄', '看不懂', '帮帮我', '教教我']),
+    ]
+    negative_count = Counter()
+    for msg in all_user_msgs:
+        for label, patterns in negative_patterns:
+            for pat in patterns:
+                if pat in msg:
+                    negative_count[label] += 1
+                    break
+    complaints = [{"type": label, "count": cnt}
+                  for label, cnt in negative_count.most_common(5) if cnt > 0]
+
+    # ---- 识别客服解决模式 ----
+    resolution_patterns = []
+    # 从客服消息中提取模式
+    resolution_keywords = [
+        ('引导自助操作', ['您可以', '试试', '点击', '进入', '打开', '设置']),
+        ('提供补偿方案', ['补偿', '补发', '给您', '赠送', '发放']),
+        ('转交其他部门', ['反馈给', '技术', '专员', '跟进', '核实']),
+        ('直接解决问题', ['已处理', '已解决', '好了', '完成了', '成功']),
+        ('要求提供信息', ['请问', '告诉我', '提供', '截图', 'ID']),
+    ]
+    resolution_count = Counter()
+    for s_summary in all_session_summaries:
+        # 检查该会话的客服消息
+        sess = next((x for x in sample_sessions if x.get('id') == s_summary['sessionId']), None)
+        if sess:
+            cat_d = (sess.get('categoryDetail', '') or '')
+            for label, patterns in resolution_keywords:
+                for pat in patterns:
+                    if pat in cat_d or (sess.get('closeReason') and str(pat) in str(sess.get('closeReason', ''))):
+                        resolution_count[label] += 1
+                        break
+
+    # 如果从 data 中没有找到，尝试从消息
+    if not resolution_count:
+        resolution_patterns = [
+            f"共分析 {analyzed_count} 条会话，用户核心关注：{'、'.join([i['issue'] for i in common_issues[:3]]) if common_issues else '多样化问题'}"
+        ]
+    else:
+        resolution_patterns = [f"{label}（{cnt}次）" for label, cnt in resolution_count.most_common(4)]
+
+    return {
+        "analyzedCount": analyzed_count,
+        "totalSampled": len(sample_sessions),
+        "commonIssues": common_issues,
+        "topPhrases": top_phrases,
+        "userComplaints": [c['type'] for c in complaints] if complaints else [],
+        "resolutionPatterns": resolution_patterns,
+        "sampleSessions": all_session_summaries[:5],  # 挂载前5个样本
+        "analysisMethod": "基于消息内容的语义分析"
     }
 
 
