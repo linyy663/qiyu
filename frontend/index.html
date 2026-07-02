@@ -223,6 +223,31 @@ td .grade {
 .agent-summary-text { font-size: 15px; line-height: 1.8; color: var(--text-primary); background: #f8f5ff; border-left: 4px solid #7c3aed; padding: 14px 18px; border-radius: 8px; margin-bottom: 16px; }
 .agent-summary-flags { margin-bottom: 16px; }
 .agent-summary-flags .flag { display: inline-block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 20px; font-size: 13px; margin: 0 6px 6px 0; }
+
+/* 概括总结 - 段落卡片 */
+.summary-section-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; box-shadow: var(--shadow); }
+.summary-section-card .sc-header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--text-secondary); background: var(--bg); border-bottom: 1px solid var(--border); }
+.summary-section-card .sc-header .sc-icon { font-size: 16px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }
+.summary-section-card .sc-body { padding: 12px 16px; font-size: 14px; line-height: 1.75; color: var(--text); }
+.summary-section-card .sc-body strong { color: var(--primary); }
+
+/* 概览 */
+.sc-icon-overview { background: #ede9fe; color: #7c3aed; }
+/* 效率 */
+.sc-icon-efficiency { background: #dbeafe; color: #2563eb; }
+/* 高峰 */
+.sc-icon-peak { background: #ffe4e6; color: #e11d48; }
+/* 分类 */
+.sc-icon-category { background: #fef3c7; color: #d97706; }
+/* 标签 */
+.sc-icon-tag { background: #d1fae5; color: #059669; }
+/* 深度分析 */
+.sc-icon-deep { background: #fce7f3; color: #be185d; }
+
+/* 概括总结 - 统计卡片分组 */
+.summary-stats-section { margin-bottom: 10px; }
+.summary-stats-section .ss-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); padding: 0 2px 6px; }
+.summary-divider { height: 1px; background: var(--border); margin: 6px 0 14px; }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .stat-item { background: #f9fafb; border-radius: 8px; padding: 14px 16px; text-align: center; }
 .stat-item .stat-value { font-size: 24px; font-weight: 700; color: var(--text-primary); }
@@ -1386,14 +1411,6 @@ async function loadAgentSummaryCore(deep) {
     // 生成 HTML
     let html = '';
 
-    // 自然语言总结
-    html += `<div class="agent-summary-text">${escapeHtml(d.summary || '暂无总结')}</div>`;
-
-    // 预警标记
-    if (d.flags && d.flags.length > 0) {
-      html += '<div class="agent-summary-flags">' + d.flags.map(f => `<span class="flag">${escapeHtml(f)}</span>`).join('') + '</div>';
-    }
-
     const s = d.stats || {};
     const total = s.total || 0;
     if (total === 0) {
@@ -1403,59 +1420,109 @@ async function loadAgentSummaryCore(deep) {
       return;
     }
 
-    // 统计卡片
+    // 预警标记
+    if (d.flags && d.flags.length > 0) {
+      html += '<div class="agent-summary-flags">' + d.flags.map(f => `<span class="flag">${escapeHtml(f)}</span>`).join('') + '</div>';
+    }
+
+    // ---- 结构化段落卡片 ----
+    if (d.sections && d.sections.length > 0) {
+      for (const sec of d.sections) {
+        const iconClass = 'sc-icon-' + (sec.icon || 'overview');
+        html += '<div class="summary-section-card">';
+        html += `<div class="sc-header"><span class="sc-icon ${iconClass}">${sec.title.slice(0,2)}</span>${escapeHtml(sec.title)}</div>`;
+        html += `<div class="sc-body">${sec.content}</div>`;  // content 已含 HTML strong 标签
+        html += '</div>';
+      }
+    } else {
+      // 兼容旧版：无 sections 时显示旧版 summary 文本
+      html += `<div class="agent-summary-text">${escapeHtml(d.summary || '暂无总结')}</div>`;
+    }
+
+    // ---- 统计指标卡片 ----
+    html += '<div class="summary-stats-section"><div class="ss-title">📊 核心指标</div>';
     html += '<div class="stats-grid">';
     html += statItem('总会话', total);
     html += statItem('有效会话', s.validCount || 0, 'good');
+    html += statItem('已解决', s.resolved || 0, 'good');
+    html += statItem('未解决', s.unresolved || 0, s.unresolved > (s.resolved||1)*0.5 ? 'bad' : '');
     html += statItem('解决率', (s.resolveRate || 0) + '%', (s.resolveRate || 0) >= 70 ? 'good' : (s.resolveRate || 0) >= 40 ? 'warn' : 'bad');
+    html += '</div>';
+
+    html += '<div class="stats-grid">';
     html += statItem('平均满意度', (s.avgSatisfaction || 0).toFixed(1) + '分', (s.avgSatisfaction || 0) >= 4 ? 'good' : (s.avgSatisfaction || 0) >= 3 ? 'warn' : 'bad');
     html += statItem('好评率', (s.satisfactionRate || 0) + '%', (s.satisfactionRate || 0) >= 70 ? 'good' : 'warn');
     html += statItem('平均首响', (s.avgFirstReplySec || 0) + '秒', (s.avgFirstReplySec || 0) <= 30 ? 'good' : (s.avgFirstReplySec || 0) <= 60 ? 'warn' : 'bad');
     html += statItem('均时长', (s.avgDurationMin || 0) + '分钟');
     html += statItem('均客服回复', (s.avgStaffMsgs || 0) + '条');
     html += '</div>';
+    html += '</div>';
 
-    // 分类分布
+    // ---- 分类分布 ----
     if (s.topCategories && s.topCategories.length > 0) {
+      html += '<div class="summary-section-card">';
+      html += '<div class="sc-header"><span class="sc-icon sc-icon-category">📂</span>问题分类分布</div>';
+      html += '<div class="sc-body">';
+      html += '<div class="topic-bars" style="margin-bottom:0">';
       const maxCount = s.topCategories[0].count;
-      html += '<h4 style="font-size:14px;color:var(--text-primary);margin-bottom:8px">📂 问题分类分布</h4>';
-      html += '<div class="topic-bars">';
       for (const cat of s.topCategories) {
         const pct = maxCount > 0 ? Math.round(cat.count / maxCount * 100) : 0;
         html += `<div class="topic-bar"><span class="topic-name">${escapeHtml(cat.name)}</span><span class="topic-fill" style="width:${pct}%"></span><span class="topic-count">${cat.count}通</span></div>`;
       }
-      html += '</div>';
+      html += '</div></div></div>';
     }
 
-    // 关键词
-    if (s.topKeywords && s.topKeywords.length > 0) {
-      html += '<h4 style="font-size:14px;color:var(--text-primary);margin-bottom:8px">🔑 高频关键词</h4>';
-      html += '<div class="agent-summary-flags">';
-      html += s.topKeywords.map(k => `<span class="flag" style="background:#f0f9ff;color:#0369a1;border-color:#bae6fd">${escapeHtml(k.keyword)} ×${k.count}</span>`).join('');
-      html += '</div>';
-    }
+    // ---- 关键词 + 时段分布 并排 ----
+    const hasKw = s.topKeywords && s.topKeywords.length > 0;
+    const hasPeak = s.peakHours && s.peakHours.length > 0;
+    if (hasKw || hasPeak) {
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
 
-    // 时段分布
-    if (s.peakHours && s.peakHours.length > 0) {
-      html += '<h4 style="font-size:14px;color:var(--text-primary);margin-bottom:8px">⏰ 时段分布</h4>';
-      html += '<div class="topic-bars">';
-      const maxH = s.peakHours[0].count;
-      for (const h of s.peakHours) {
-        const pct = maxH > 0 ? Math.round(h.count / maxH * 100) : 0;
-        html += `<div class="topic-bar"><span class="topic-name">${h.hour}:00</span><span class="topic-fill" style="width:${pct}%;background:linear-gradient(90deg,#0891b2,#06b6d4)"></span><span class="topic-count">${h.count}通</span></div>`;
+      if (hasKw) {
+        html += '<div class="summary-section-card">';
+        html += '<div class="sc-header"><span class="sc-icon sc-icon-tag">🔑</span>高频关键词</div>';
+        html += '<div class="sc-body" style="display:flex;flex-wrap:wrap;gap:4px">';
+        html += s.topKeywords.map(k => `<span class="flag" style="background:#f0f9ff;color:#0369a1;border-color:#bae6fd">${escapeHtml(k.keyword)} ×${k.count}</span>`).join('');
+        html += '</div></div>';
       }
+
+      if (hasPeak) {
+        html += '<div class="summary-section-card">';
+        html += '<div class="sc-header"><span class="sc-icon sc-icon-peak">⏰</span>时段分布</div>';
+        html += '<div class="sc-body">';
+        html += '<div class="topic-bars" style="margin-bottom:0">';
+        const maxH = s.peakHours[0].count;
+        for (const h of s.peakHours) {
+          const pct = maxH > 0 ? Math.round(h.count / maxH * 100) : 0;
+          html += `<div class="topic-bar"><span class="topic-name">${h.hour}:00</span><span class="topic-fill" style="width:${pct}%;background:linear-gradient(90deg,#0891b2,#06b6d4)"></span><span class="topic-count">${h.count}通</span></div>`;
+        }
+        html += '</div></div></div>';
+      }
+
       html += '</div>';
+    }
+
+    // ---- 细粒度问题标签 ----
+    if (s.topTags && s.topTags.length > 0) {
+      html += '<div class="summary-section-card">';
+      html += '<div class="sc-header"><span class="sc-icon sc-icon-tag">🏷️</span>细粒度问题标签</div>';
+      html += '<div class="sc-body" style="display:flex;flex-wrap:wrap;gap:4px">';
+      html += s.topTags.map(t => `<span class="flag" style="background:#f0f9ff;color:#0369a1;border-color:#bae6fd">${escapeHtml(t.tag)} ×${t.count}</span>`).join('');
+      html += '</div></div>';
     }
 
     // ---- 深度分析内容 ----
     if (d.deepAnalysis) {
       const da = d.deepAnalysis;
       const analyzedOk = (da.analyzedCount || 0) > 0;
-      html += '<h4 style="font-size:14px;color:#7c3aed;margin:16px 0 8px">🔬 会话内容分析（采样 ' + (da.totalSampled || 0) + ' 条，成功分析 ' + (da.analyzedCount || 0) + ' 条）</h4>';
+      html += '<div class="summary-section-card" style="border-color:#e9d5ff">';
+      html += '<div class="sc-header" style="background:#faf5ff;color:#7c3aed;border-color:#e9d5ff">';
+      html += '<span class="sc-icon sc-icon-deep">🔬</span>会话内容分析（采样 ' + (da.totalSampled || 0) + ' 条，成功分析 ' + (da.analyzedCount || 0) + ' 条）</div>';
+      html += '<div class="sc-body">';
 
-      // 显示错误信息
+      // 错误
       if (da.fetchErrors && da.fetchErrors.length > 0) {
-        html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#991b1b">';
+        html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#991b1b">';
         html += '<strong>⚠️ 获取消息时遇到问题：</strong><br>';
         html += da.fetchErrors.map(e => '· ' + escapeHtml(e)).join('<br>');
         html += '</div>';
@@ -1463,7 +1530,7 @@ async function loadAgentSummaryCore(deep) {
 
       // 常见问题
       if (da.commonIssues && da.commonIssues.length > 0) {
-        html += '<h5 style="font-size:13px;color:var(--text-primary);margin:10px 0 6px">📋 涉及问题类型</h5>';
+        html += '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">📋 涉及问题类型</div>';
         html += '<div class="topic-bars">';
         const maxI = da.commonIssues[0].count;
         for (const iss of da.commonIssues) {
@@ -1475,47 +1542,41 @@ async function loadAgentSummaryCore(deep) {
 
       // 高频短语
       if (da.topPhrases && da.topPhrases.length > 0) {
-        html += '<h5 style="font-size:13px;color:var(--text-primary);margin:10px 0 6px">💬 用户高频表达</h5>';
-        html += '<div class="agent-summary-flags">';
+        html += '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">💬 用户高频表达</div>';
+        html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">';
         html += da.topPhrases.map(p => `<span class="flag" style="background:#fdf4ff;color:#86198f;border-color:#e9d5ff">${escapeHtml(p.phrase)} ×${p.count}</span>`).join('');
         html += '</div>';
       }
 
-      // 用户情绪/诉求
+      // 用户情绪
       if (da.userComplaints && da.userComplaints.length > 0) {
-        html += '<h5 style="font-size:13px;color:var(--text-primary);margin:10px 0 6px">😟 用户情绪倾向</h5>';
-        html += '<div class="agent-summary-flags">';
+        html += '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">😟 用户情绪倾向</div>';
+        html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">';
         html += da.userComplaints.map(c => `<span class="flag" style="background:#fff7ed;color:#c2410c;border-color:#fed7aa">${escapeHtml(c)}</span>`).join('');
         html += '</div>';
       }
 
       // 会话样本
       if (da.sampleSessions && da.sampleSessions.length > 0) {
-        html += '<h5 style="font-size:13px;color:var(--text-primary);margin:10px 0 6px">📝 典型会话摘要</h5>';
+        html += '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px">📝 典型会话摘要</div>';
         for (const ss of da.sampleSessions) {
           const resolvedLabel = ss.resolved ? '<span style="color:#16a34a">✓ 已解决</span>' : '<span style="color:#dc2626">✗ 未解决</span>';
-          html += `<div class="summary-card" style="margin-bottom:8px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
+          html += `<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
               <strong>${escapeHtml(ss.category)}</strong>
               <small>${resolvedLabel} &nbsp; 消息:${ss.msgCount} &nbsp; 用户:${ss.userMsgCount}条/客服:${ss.staffMsgCount}条</small>
             </div>
-            <p style="margin:6px 0 0;font-size:13px;color:var(--text-secondary)">${escapeHtml(ss.userSample)}</p>
+            <p style="margin:0;font-size:13px;color:var(--text-secondary)">${escapeHtml(ss.userSample)}</p>
           </div>`;
         }
       }
 
-      // 如果完全失败但无具体内容显示
+      // 完全失败提示
       if (!analyzedOk && !(da.commonIssues && da.commonIssues.length > 0)) {
-        html += '<div class="empty-state" style="padding:16px"><p style="color:#991b1b">深度分析未能获取到有效的会话消息。可能原因：API权限不足、会话消息已过期、或所选会话仅有图片/系统消息。</p></div>';
+        html += '<div style="padding:12px;text-align:center;color:#991b1b;font-size:13px">深度分析未能获取到有效的会话消息。可能原因：API权限不足、会话消息已过期、或所选会话仅有图片/系统消息。</div>';
       }
-    }
 
-    // ---- 细粒度问题标签（从 categoryDetail 提取）----
-    if (s.topTags && s.topTags.length > 0) {
-      html += '<h4 style="font-size:13px;color:var(--text-primary);margin:16px 0 6px">🏷️ 细粒度问题标签</h4>';
-      html += '<div class="agent-summary-flags">';
-      html += s.topTags.map(t => `<span class="flag" style="background:#f0f9ff;color:#0369a1;border-color:#bae6fd">${escapeHtml(t.tag)} ×${t.count}</span>`).join('');
-      html += '</div>';
+      html += '</div></div>';
     }
 
     body.innerHTML = html;

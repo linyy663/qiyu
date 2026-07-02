@@ -738,7 +738,7 @@ def api_agent_summary(agent_id_str):
         if api.app_key and api.app_secret:
             deep_data = analyze_agent_content_deeply(sessions, agent_id, api)
             summary_data['deepAnalysis'] = deep_data
-            # 将内容发现融入总结文本（仅当分析成功时）
+            # 将内容发现融入总结（追加为新的 section）
             if deep_data.get('analyzedCount', 0) > 0:
                 deep_parts = []
                 if deep_data.get('commonIssues'):
@@ -751,7 +751,10 @@ def api_agent_summary(agent_id_str):
                     patterns_text = '、'.join(deep_data['resolutionPatterns'][:3])
                     deep_parts.append(f"常见解决方案：{patterns_text}")
                 if deep_parts:
-                    summary_data['summary'] += "\\n\\n📝 **会话内容分析**：" + "；".join(deep_parts) + "。"
+                    deep_section = {"title": "📝 会话内容分析", "icon": "deep", "content": "；".join(deep_parts) + "。"}
+                    summary_data.setdefault('sections', [])
+                    summary_data['sections'].append(deep_section)
+                    summary_data['summary'] += "\n\n📝 **会话内容分析**：" + "；".join(deep_parts) + "。"
         else:
             summary_data['deepAnalysis'] = {
                 "analyzedCount": 0,
@@ -919,53 +922,54 @@ def generate_agent_summary(sessions: list, agent_id: int, date_str: str) -> dict
 
     top_tags = sorted(merged_tags.items(), key=lambda x: -x[1])[:12]
 
-    # ---- 生成自然语言总结 ----
-    parts = []
-
-    # 基本信息
+    # ---- 生成结构化总结段落 ----
     agent_name = sessions[0].get('staffName', f'坐席{agent_id}') if sessions else f'坐席{agent_id}'
     if not agent_name:
         agent_name = f'坐席{agent_id}'
 
-    parts.append(f"【{agent_name}】在 {date_str} 共处理 {total} 通会话")
+    summary_sections = []
 
+    # 段落1：概览
+    overview_items = [f"<strong>{agent_name}</strong> 在 {date_str} 共处理 <strong>{total} 通</strong>会话"]
     if valid_count > 0:
-        parts.append(f"有效会话 {valid_count} 通（{valid_rate}%）")
-
+        overview_items.append(f"其中有效会话 <strong>{valid_count} 通</strong>（{valid_rate}%）")
     if resolved > 0:
-        parts.append(f"已解决 {resolved} 通（解决率 {resolve_rate}%）")
+        overview_items.append(f"已解决 <strong>{resolved} 通</strong>")
     if unresolved > 0:
-        parts.append(f"未解决 {unresolved} 通")
+        overview_items.append(f"未解决 {unresolved} 通")
+    if solving > 0:
+        overview_items.append(f"解决中 {solving} 通")
+    summary_sections.append({"title": "📋 会话概览", "icon": "overview", "content": "，".join(overview_items) + "。"})
 
-    # 满意度
+    # 段落2：满意度与效率
+    perf_items = []
     if evaluated:
-        parts.append(f"收到 {len(evaluated)} 条评价，平均 {avg_satisfaction} 分，好评率 {satisfaction_rate}%")
+        perf_items.append(f"收到 <strong>{len(evaluated)} 条</strong>评价，平均满意度 <strong>{avg_satisfaction} 分</strong>，好评率 <strong>{satisfaction_rate}%</strong>")
     else:
-        parts.append("未收到用户评价")
-
-    # 工作效率
-    if avg_duration > 0:
-        parts.append(f"平均会话时长 {avg_duration} 分钟")
+        perf_items.append("该时段未收到用户评价")
     if avg_first_reply > 0:
-        parts.append(f"平均首次响应 {avg_first_reply} 秒")
-
+        perf_items.append(f"平均首次响应 <strong>{avg_first_reply} 秒</strong>")
+    if avg_duration > 0:
+        perf_items.append(f"平均会话时长 <strong>{avg_duration} 分钟</strong>")
     if avg_staff_msgs > 0:
-        parts.append(f"平均客服回复 {avg_staff_msgs} 条/通，访客发言 {avg_user_msgs} 条/通")
+        perf_items.append(f"平均客服回复 <strong>{avg_staff_msgs} 条</strong>，访客发言 <strong>{avg_user_msgs} 条</strong>")
+    if perf_items:
+        summary_sections.append({"title": "⏱ 服务效率", "icon": "efficiency", "content": "，".join(perf_items) + "。"})
 
-    # 高峰时段
+    # 段落3：高峰时段
     if peak_hours:
-        peak_text = '、'.join([f"{h}:00-{h+1}:00（{c}通）" for h, c in peak_hours])
-        parts.append(f"高峰时段集中在 {peak_text}")
+        peak_text = '、'.join([f"<strong>{h}:00-{h+1}:00</strong>（{c}通）" for h, c in peak_hours])
+        summary_sections.append({"title": "🔥 高峰时段", "icon": "peak", "content": f"会话主要集中在 {peak_text}。"})
 
-    # 主要问题类型（优先使用细粒度标签）
+    # 段落4：问题类型
     if merged_cats:
-        top_cat_text = '、'.join([f"{cat}（{cnt}通）" for cat, cnt in list(merged_cats.items())[:5]])
-        parts.append(f"主要问题类型：{top_cat_text}")
+        top_cat_text = '、'.join([f"<strong>{cat}</strong>（{cnt}通）" for cat, cnt in list(merged_cats.items())[:5]])
+        summary_sections.append({"title": "📂 主要问题类型", "icon": "category", "content": f"涉及 {top_cat_text}。"})
 
-    # 细粒度问题标签
+    # 段落5：细粒度标签
     if top_tags:
-        top_tag_text = '、'.join([f"{tag}（{cnt}次）" for tag, cnt in top_tags[:6]])
-        parts.append(f"高频问题标签：{top_tag_text}")
+        top_tag_text = '、'.join([f"<strong>{tag}</strong>（{cnt}次）" for tag, cnt in top_tags[:6]])
+        summary_sections.append({"title": "🏷️ 高频问题标签", "icon": "tag", "content": f"{top_tag_text}。"})
 
     # 突出问题
     flags = []
@@ -978,14 +982,15 @@ def generate_agent_summary(sessions: list, agent_id: int, date_str: str) -> dict
     if keyword_freq.get('转人工失败', 0) > total * 0.3:
         flags.append(f"⚠️ 转人工失败比例较高（{keyword_freq.get('转人工失败', 0)} 通）")
 
-    # 汇总
-    summary_text = "；".join(parts) + "。"
+    # 兼容旧版 summary 字段
+    summary_text = "；".join([s["content"] for s in summary_sections])
 
     return {
         "agentName": agent_name,
         "agentId": agent_id,
         "date": date_str,
         "summary": summary_text,
+        "sections": summary_sections,
         "flags": flags,
         "stats": {
             "total": total,
