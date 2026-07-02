@@ -216,6 +216,25 @@ td .grade {
 }
 .btn-primary:hover { background: #2563eb; }
 .btn-sm { padding: 4px 12px; font-size: 12px; }
+.btn-accent { background: #7c3aed; color: #fff; }
+.btn-accent:hover { background: #6d28d9; }
+
+/* 坐席概括总结 */
+.agent-summary-text { font-size: 15px; line-height: 1.8; color: var(--text-primary); background: #f8f5ff; border-left: 4px solid #7c3aed; padding: 14px 18px; border-radius: 8px; margin-bottom: 16px; }
+.agent-summary-flags { margin-bottom: 16px; }
+.agent-summary-flags .flag { display: inline-block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 20px; font-size: 13px; margin: 0 6px 6px 0; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.stat-item { background: #f9fafb; border-radius: 8px; padding: 14px 16px; text-align: center; }
+.stat-item .stat-value { font-size: 24px; font-weight: 700; color: var(--text-primary); }
+.stat-item .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.stat-item.stat-good .stat-value { color: #059669; }
+.stat-item.stat-warn .stat-value { color: #d97706; }
+.stat-item.stat-bad .stat-value { color: #dc2626; }
+.topic-bars { margin-bottom: 16px; }
+.topic-bar { display: flex; align-items: center; margin-bottom: 6px; font-size: 13px; }
+.topic-bar .topic-name { width: 100px; text-align: right; margin-right: 10px; color: var(--text-secondary); flex-shrink: 0; }
+.topic-bar .topic-fill { height: 20px; background: linear-gradient(90deg, #7c3aed, #a78bfa); border-radius: 4px; min-width: 4px; transition: width 0.5s; }
+.topic-bar .topic-count { margin-left: 8px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
 .btn-text { border: none; background: none; color: var(--primary); padding: 4px 8px; }
 .btn-text:hover { background: var(--primary-light); }
 
@@ -588,6 +607,7 @@ td .grade {
               <option value="">-- 请先加载坐席数据 --</option>
             </select>
             <button class="btn btn-primary" onclick="loadAgentSessions()" style="margin-left:12px">查询会话</button>
+            <button class="btn btn-accent" onclick="loadAgentSummary()" style="margin-left:8px" id="btn-agent-summary">📊 概括总结</button>
             <button class="btn btn-sm" onclick="triggerCacheRefresh()" style="margin-left:8px" id="btn-refresh-cache" title="手动触发缓存刷新">🔄 刷新缓存</button>
             <span style="font-size:12px;color:var(--text-secondary);margin-left:12px;display:block;margin-top:6px">
               💡 会话数据需凌晨2:00-6:00自动缓存（需企业开通批量导出权限）
@@ -601,6 +621,16 @@ td .grade {
               <span style="font-size:12px;color:var(--text-secondary);margin-left:8px">需要企业开通"会话导出"权限</span>
             </div>
           </div>
+        </div>
+      </div>
+      <!-- 坐席概括总结卡片 -->
+      <div id="agent-summary-section" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <h3>📊 坐席概括总结 <span id="agent-summary-title" style="font-size:14px;font-weight:normal;color:var(--text-secondary)"></span></h3>
+            <button class="btn btn-sm" onclick="document.getElementById('agent-summary-section').style.display='none'" style="margin-left:auto">✕ 收起</button>
+          </div>
+          <div class="section-body" id="agent-summary-body"></div>
         </div>
       </div>
       <div id="sessions-list-section" style="display:none">
@@ -1320,6 +1350,117 @@ async function loadAgentSessions() {
   const data = resp.data;
   const sourceTag = data.cached_at ? `数据来源：缓存 (${data.cached_at})` : '';
   renderSessionsList(data.sessions || [], sourceTag);
+}
+
+async function loadAgentSummary() {
+  const agentId = document.getElementById('session-agent-select').value;
+  if (!agentId) { showToast('请先选择坐席', 'error'); return; }
+
+  const btn = document.getElementById('btn-agent-summary');
+  btn.disabled = true;
+  btn.textContent = '⏳ 生成中...';
+  showToast('正在生成坐席概括总结...');
+
+  try {
+    const resp = await apiGet(`/api/sessions/agent/${agentId}/summary?date=${currentDate}`);
+    btn.disabled = false;
+    btn.textContent = '📊 概括总结';
+
+    if (resp.code !== 200) {
+      showToast(resp.message || '生成总结失败', 'error');
+      return;
+    }
+
+    const d = resp.data;
+    const section = document.getElementById('agent-summary-section');
+    const body = document.getElementById('agent-summary-body');
+    const title = document.getElementById('agent-summary-title');
+    title.textContent = `— ${d.agentName || `坐席${agentId}`} · ${d.date || currentDate}`;
+
+    // 生成 HTML
+    let html = '';
+
+    // 自然语言总结
+    html += `<div class="agent-summary-text">${escapeHtml(d.summary || '暂无总结')}</div>`;
+
+    // 预警标记
+    if (d.flags && d.flags.length > 0) {
+      html += '<div class="agent-summary-flags">' + d.flags.map(f => `<span class="flag">${escapeHtml(f)}</span>`).join('') + '</div>';
+    }
+
+    const s = d.stats || {};
+    const total = s.total || 0;
+    if (total === 0) {
+      html += '<div class="empty-state"><div class="icon">📭</div><h3>无会话数据</h3></div>';
+      body.innerHTML = html;
+      section.style.display = 'block';
+      return;
+    }
+
+    // 统计卡片
+    html += '<div class="stats-grid">';
+    html += statItem('总会话', total);
+    html += statItem('有效会话', s.validCount || 0, 'good');
+    html += statItem('解决率', (s.resolveRate || 0) + '%', (s.resolveRate || 0) >= 70 ? 'good' : (s.resolveRate || 0) >= 40 ? 'warn' : 'bad');
+    html += statItem('平均满意度', (s.avgSatisfaction || 0).toFixed(1) + '分', (s.avgSatisfaction || 0) >= 4 ? 'good' : (s.avgSatisfaction || 0) >= 3 ? 'warn' : 'bad');
+    html += statItem('好评率', (s.satisfactionRate || 0) + '%', (s.satisfactionRate || 0) >= 70 ? 'good' : 'warn');
+    html += statItem('平均首响', (s.avgFirstReplySec || 0) + '秒', (s.avgFirstReplySec || 0) <= 30 ? 'good' : (s.avgFirstReplySec || 0) <= 60 ? 'warn' : 'bad');
+    html += statItem('均时长', (s.avgDurationMin || 0) + '分钟');
+    html += statItem('均客服回复', (s.avgStaffMsgs || 0) + '条');
+    html += '</div>';
+
+    // 分类分布
+    if (s.topCategories && s.topCategories.length > 0) {
+      const maxCount = s.topCategories[0].count;
+      html += '<h4 style="font-size:14px;color:var(--text-primary);margin-bottom:8px">📂 问题分类分布</h4>';
+      html += '<div class="topic-bars">';
+      for (const cat of s.topCategories) {
+        const pct = maxCount > 0 ? Math.round(cat.count / maxCount * 100) : 0;
+        html += `<div class="topic-bar"><span class="topic-name">${escapeHtml(cat.name)}</span><span class="topic-fill" style="width:${pct}%"></span><span class="topic-count">${cat.count}通</span></div>`;
+      }
+      html += '</div>';
+    }
+
+    // 关键词
+    if (s.topKeywords && s.topKeywords.length > 0) {
+      html += '<h4 style="font-size:14px;color:var(--text-primary);margin-bottom:8px">🔑 高频关键词</h4>';
+      html += '<div class="agent-summary-flags">';
+      html += s.topKeywords.map(k => `<span class="flag" style="background:#f0f9ff;color:#0369a1;border-color:#bae6fd">${escapeHtml(k.keyword)} ×${k.count}</span>`).join('');
+      html += '</div>';
+    }
+
+    // 时段分布
+    if (s.peakHours && s.peakHours.length > 0) {
+      html += '<h4 style="font-size:14px;color:var(--text-primary);margin-bottom:8px">⏰ 时段分布</h4>';
+      html += '<div class="topic-bars">';
+      const maxH = s.peakHours[0].count;
+      for (const h of s.peakHours) {
+        const pct = maxH > 0 ? Math.round(h.count / maxH * 100) : 0;
+        html += `<div class="topic-bar"><span class="topic-name">${h.hour}:00</span><span class="topic-fill" style="width:${pct}%;background:linear-gradient(90deg,#0891b2,#06b6d4)"></span><span class="topic-count">${h.count}通</span></div>`;
+      }
+      html += '</div>';
+    }
+
+    body.innerHTML = html;
+    section.style.display = 'block';
+    section.scrollIntoView({ behavior: 'smooth' });
+
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '📊 概括总结';
+    showToast('网络请求失败: ' + e.message, 'error');
+  }
+}
+
+function statItem(label, value, quality) {
+  let cls = 'stat-item';
+  if (quality) cls += ' stat-' + quality;
+  return `<div class="${cls}"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function renderSessionsList(sessions, sourceTag) {
