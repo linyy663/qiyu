@@ -205,22 +205,23 @@ def api_overview_trend():
     china_tz = datetime.timezone(datetime.timedelta(hours=8))
     base_dt = datetime.datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=china_tz)
 
-    # 初始延迟：避免紧随 overview 调用触发频率限制
-    time_mod.sleep(2)
-
     trend_points = []
     for i in range(days):
         day_dt = base_dt + datetime.timedelta(days=i)
         day_str = day_dt.strftime('%Y-%m-%d')
         day_start_ms, day_end_ms, _ = get_timestamp_range(day_str, days=1)
 
-        # 检查缓存
+        # 检查缓存（扩展至10分钟）
         cache_key = get_cache_key('overview', day_str)
         cached = cache.get(cache_key)
         if cached and (time_mod.time() - cached[0] < 600):
             overview_data = cached[1].get('data', {})
             trend_points.append(_extract_trend_point(day_str, overview_data))
             continue
+
+        # 仅首次API调用前加短暂间隔，避免紧跟前一个请求
+        if i == 0:
+            time_mod.sleep(1)
 
         # 指数退避重试
         result = api_call_with_retry(api.get_overview, day_start_ms, day_end_ms)
@@ -250,11 +251,12 @@ def api_overview_trend():
             cache[cache_key] = (time_mod.time(), cache_data)
             trend_points.append(_extract_trend_point(day_str, cache_data['data']))
         else:
-            trend_points.append({"date": day_str, "_error": True})
+            trend_points.append({"date": day_str, "_error": True, "_errorCode": result.get('code'),
+                                 "_errorMsg": result.get('message', 'API调用失败')})
 
-        # 日间间隔 2 秒
+        # 日间间隔 1 秒（减少总等待时间）
         if i < days - 1:
-            time_mod.sleep(2)
+            time_mod.sleep(1)
 
     return jsonify({"code": 200, "data": {
         "startDate": date_str,

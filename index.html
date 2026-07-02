@@ -515,18 +515,13 @@ td .grade {
   .main { padding: 16px; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
-
-/* 静态模式提示横幅 */
-.static-mode-banner { display:none; background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; padding: 8px 16px; text-align: center; font-size: 13px; border-bottom: 1px solid #fcd34d; }
-.static-mode-banner.show { display: block; }
+#static-mode-banner { display:none; background:#fff7ed; border-bottom:1px solid #fed7aa; padding:8px 16px; text-align:center; font-size:13px; color:#c2410c; }
+#static-mode-banner.show { display:block; }
 </style>
 </head>
 <body>
 
-<!-- 静态模式横幅 -->
-<div class="static-mode-banner" id="static-mode-banner">
-  ⚠️ 当前为静态模式（GitHub Pages）— 仅支持查看已缓存的客服会话记录。完整功能请本地运行 Flask。
-</div>
+<div id="static-mode-banner">⚠️ 静态模式：仅展示已缓存的会话记录，统计功能需运行本地 Flask（端口5890）</div>
 
 <!-- Header -->
 <div class="header">
@@ -783,6 +778,7 @@ let currentDate = getYesterdayStr();
 let dashboardChart = null;
 let agentsChart = null;
 let reportRadarChart = null;
+let isStaticMode = false;
 
 function getYesterdayStr() {
   const d = new Date();
@@ -810,6 +806,20 @@ async function apiGet(path) {
   } catch (e) {
     clearTimeout(timer);
     const msg = e.name === 'AbortError' ? '请求超时，请稍后重试' : '网络请求失败: ' + e.message;
+    return { code: -1, message: msg };
+  }
+}
+
+async function apiGetLong(path, timeoutMs) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs || 90000); // 默认90秒
+  try {
+    const resp = await fetch(API_BASE + path, { signal: ctrl.signal });
+    clearTimeout(timer);
+    return await resp.json();
+  } catch (e) {
+    clearTimeout(timer);
+    const msg = e.name === 'AbortError' ? '请求超时（趋势数据量较大）' : '网络请求失败: ' + e.message;
     return { code: -1, message: msg };
   }
 }
@@ -988,6 +998,12 @@ function dateUrl(path) {
 // ==================== 1. 仪表盘 ====================
 
 async function loadDashboard() {
+  // 取消进行中的趋势图加载
+  if (trendChartTimer) { clearTimeout(trendChartTimer); trendChartTimer = null; }
+  trendLoading = false;
+  const chartWrapper = document.getElementById('dashboardChart').parentElement;
+  chartWrapper.querySelectorAll('.chart-placeholder').forEach(el => el.remove());
+
   showLoading('dashboard');
   const resp = await apiGet(dateUrl('/api/stats/overview'));
 
@@ -1013,10 +1029,20 @@ async function loadDashboard() {
         <h3>数据加载失败</h3>
         <p>${resp.message || '请检查API配置和网络连接'}</p>
       </div>`;
+    // 仍然加载趋势图（出错也要清理 chart 区域）
+    trendChartTimer = setTimeout(() => loadTrendChart(null, resp.message), 1000);
     return;
   }
 
   const data = resp.data;
+  const days = getDaysSpan();
+
+  // 日期范围标签
+  let dateLabel = data.date;
+  if (days > 1) {
+    dateLabel = `${currentDate} ~ ${currentEndDate}（总览仅展示最后一天 ${data.date}）`;
+  }
+
   const cards = [
     { label: '总会话量', value: data.totalSessions, cls: 'primary', sub: `有效会话 ${data.effectiveSessions}` },
     { label: '总消息量', value: data.totalMessages, cls: 'primary', sub: `咨询量 ${data.totalConsultCount}` },
@@ -1028,7 +1054,9 @@ async function loadDashboard() {
     { label: '登录坐席', value: data.loginStaffCount, cls: 'primary', sub: `访问量 ${data.visitCount}` },
   ];
 
-  document.getElementById('overview-cards').innerHTML = cards.map(c =>
+  document.getElementById('overview-cards').innerHTML =
+    `<div class="date-range-banner" style="grid-column: 1/-1;font-size:12px;color:var(--text-secondary);margin-bottom:4px">${dateLabel}</div>` +
+    cards.map(c =>
     `<div class="stat-card">
       <div class="label">${c.label}</div>
       <div class="value ${c.cls}">${c.value}</div>
@@ -1039,42 +1067,84 @@ async function loadDashboard() {
   document.getElementById('dashboard-content').style.display = 'block';
   hideLoading('dashboard');
 
-  // 趋势图延迟加载（等2秒，避免紧随 overview 触发七鱼频率限制）
-  setTimeout(() => loadTrendChart(data), 2000);
+  // 趋势图延迟加载
+  trendChartTimer = setTimeout(() => loadTrendChart(data), 2000);
 }
 
-async function loadTrendChart(overviewData) {
+let trendChartTimer = null;
+let trendLoading = false;
+
+async function loadTrendChart(overviewData, overviewError) {
+  // 防止重复加载
+  if (trendLoading) return;
+  trendLoading = true;
+
   const days = getDaysSpan();
   if (dashboardChart) dashboardChart.destroy();
+  dashboardChart = null;
+
   const ctx = document.getElementById('dashboardChart').getContext('2d');
+  const chartWrapper = document.getElementById('dashboardChart').parentElement;
+  chartWrapper.style.position = 'relative';
+  chartWrapper.querySelectorAll('.chart-placeholder').forEach(el => el.remove());
+
+  // 总览数据出错时显示
+  if (!overviewData && overviewError) {
+    const errEl = document.createElement('div');
+    errEl.className = 'chart-placeholder';
+    errEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;color:#dc2626;z-index:1;text-align:center';
+    errEl.innerHTML = `<div style="font-size:32px;margin-bottom:8px">⚠️</div><div>数据加载失败</div><div style="font-size:12px;color:var(--text-secondary)">${overviewError}</div>`;
+    chartWrapper.appendChild(errEl);
+    trendLoading = false;
+    return;
+  }
+
+  if (!overviewData) {
+    // overviewData 为 null 但无错误消息 — 先显示柱状图占位
+    const placeEl = document.createElement('div');
+    placeEl.className = 'chart-placeholder';
+    placeEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;color:var(--text-secondary);z-index:1';
+    placeEl.textContent = '暂无数据';
+    chartWrapper.appendChild(placeEl);
+    trendLoading = false;
+    return;
+  }
 
   if (days > 1) {
-    // 显示加载中
-    const chartWrapper = document.getElementById('dashboardChart').parentElement;
-    const oldInfo = chartWrapper.querySelector('.chart-placeholder');
-    if (oldInfo) oldInfo.remove();
-    
+    // 显示加载提示
     const loadingEl = document.createElement('div');
     loadingEl.className = 'chart-placeholder';
-    loadingEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;color:var(--text-secondary);z-index:1';
-    loadingEl.textContent = '正在加载趋势数据...';
-    chartWrapper.style.position = 'relative';
+    loadingEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;color:var(--text-secondary);z-index:1;text-align:center';
+    loadingEl.innerHTML = `<div class="spinner" style="margin:0 auto 8px"></div><div>正在加载 ${days} 天趋势数据...</div><div style="font-size:11px;color:#999">每天约需 3-5 秒，请耐心等待</div>`;
     chartWrapper.appendChild(loadingEl);
 
     try {
-      const trendResp = await apiGet(`/api/stats/overview/trend?date=${currentDate}&days=${days}`);
+      // 使用长超时请求（最多90秒），趋势查询较耗时
+      const trendResp = await apiGetLong(`/api/stats/overview/trend?date=${currentDate}&days=${days}`, 90000);
       loadingEl.remove();
 
       if (trendResp.code === 200 && trendResp.data) {
         const points = trendResp.data.points || [];
         const validPoints = points.filter(p => !p._error);
-        
+        const errorPoints = points.filter(p => p._error);
+
+        // 部分日期失败提示
+        if (errorPoints.length > 0) {
+          const warnEl = document.createElement('div');
+          warnEl.className = 'chart-placeholder';
+          warnEl.style.cssText = 'position:absolute;top:4px;right:8px;font-size:11px;color:#c2410c;z-index:1;background:#fff7ed;padding:2px 8px;border-radius:4px;border:1px solid #fed7aa';
+          const errDates = errorPoints.map(p => p.date.slice(5)).join(', ');
+          warnEl.textContent = `⚠ ${errDates} 获取失败（可能无数据）`;
+          chartWrapper.appendChild(warnEl);
+        }
+
         if (validPoints.length === 0) {
           const emptyEl = document.createElement('div');
           emptyEl.className = 'chart-placeholder';
-          emptyEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;color:var(--text-secondary);z-index:1';
-          emptyEl.textContent = '所选时间段暂无趋势数据';
+          emptyEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;color:var(--text-secondary);z-index:1;text-align:center';
+          emptyEl.innerHTML = `<div style="font-size:32px;margin-bottom:8px">📊</div><div>所选时间段暂无有效趋势数据</div>`;
           chartWrapper.appendChild(emptyEl);
+          trendLoading = false;
           return;
         }
 
@@ -1107,9 +1177,23 @@ async function loadTrendChart(overviewData) {
             }
           }
         });
+      } else {
+        // API 返回非200错误
+        const errEl = document.createElement('div');
+        errEl.className = 'chart-placeholder';
+        errEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;color:#dc2626;z-index:1;text-align:center';
+        errEl.innerHTML = `<div style="font-size:32px;margin-bottom:8px">⚠️</div><div>趋势数据加载失败</div><div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${trendResp.message || '请稍后重试'}</div>
+          <button class="btn btn-primary" style="margin-top:12px;font-size:12px;padding:4px 12px" onclick="loadAllData()">重试</button>`;
+        chartWrapper.appendChild(errEl);
       }
     } catch (e) {
       loadingEl.remove();
+      const errEl = document.createElement('div');
+      errEl.className = 'chart-placeholder';
+      errEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;color:#dc2626;z-index:1;text-align:center';
+      errEl.innerHTML = `<div style="font-size:32px;margin-bottom:8px">⚠️</div><div>趋势数据加载出错</div><div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${e.message || '未知错误'}</div>
+        <button class="btn btn-primary" style="margin-top:12px;font-size:12px;padding:4px 12px" onclick="loadAllData()">重试</button>`;
+      chartWrapper.appendChild(errEl);
     }
   } else {
     // 单天：柱状图
@@ -1132,6 +1216,7 @@ async function loadTrendChart(overviewData) {
       }
     });
   }
+  trendLoading = false;
 }
 
 // ==================== 数值格式化辅助 ====================
@@ -1282,25 +1367,35 @@ function fillAgentSelect(agents) {
 // ==================== 3. 会话分析 ====================
 
 async function loadSessionsPage() {
-  // 静态模式：从 data/latest.json 加载坐席列表
-  if (staticMode) {
+  hideLoading('sessions');
+  // 静态模式：从 latest.json 索引中加载坐席
+  if (typeof isStaticMode !== 'undefined' && isStaticMode) {
     try {
-      const resp = await fetch('data/latest.json');
-      if (resp.ok) {
-        const latest = await resp.json();
-        const dates = latest.sessionDates || [];
-        if (dates.length > 0) {
-          currentDate = dates[dates.length - 1];
-          document.getElementById('sessions-date').value = currentDate;
-        }
+      const latestResp = await fetch('data/latest.json?_=' + Date.now());
+      const latestData = await latestResp.json();
+      const dates = latestData.sessionDates || [];
+      // 从最近的 JSON 文件中加载坐席
+      if (dates.length > 0) {
+        currentDate = dates[dates.length - 1];
+        const dataResp = await fetch('data/sessions-' + currentDate + '.json?_=' + Date.now());
+        const data = await dataResp.json();
+        const sessions = data.sessions || data || [];
+        const agentMap = {};
+        sessions.forEach(s => {
+          const sid = s.staffId || 0;
+          const sname = s.staffName || ('坐席' + sid);
+          if (!agentMap[sid]) agentMap[sid] = { id: sid, name: sname, account: '' };
+        });
+        cachedAgents = Object.values(agentMap);
+        fillAgentSelect(cachedAgents);
+        document.getElementById('cache-status-badge').innerHTML = '<span style="color:#c2410c">📋 静态模式：' + currentDate + '</span>';
       }
-    } catch (e) { /* ignore */ }
-    // 从缓存的 JSON 构建坐席列表
-    buildAgentListFromJson();
+    } catch (e) {
+      document.getElementById('cache-status-badge').innerHTML = '<span style="color:#dc2626">⚠ 加载缓存失败</span>';
+    }
     document.getElementById('sessions-content').style.display = 'block';
     return;
   }
-
   // 优先使用缓存的坐席数据，没有则重新拉取（不重复打API）
   if (cachedAgents.length > 0) {
     fillAgentSelect(cachedAgents);
@@ -1320,29 +1415,6 @@ async function loadSessionsPage() {
   checkCacheStatus();
   hideLoading('sessions');
   document.getElementById('sessions-content').style.display = 'block';
-}
-
-// 静态模式：从 JSON 构建坐席列表
-async function buildAgentListFromJson() {
-  try {
-    const resp = await fetch(`data/sessions-${currentDate}.json`);
-    if (!resp.ok) throw new Error('No cache');
-    const data = await resp.json();
-    const sessions = data.sessions || data || [];
-    const agentsMap = {};
-    for (const s of sessions) {
-      const sid = s.staffId || 0;
-      const sname = s.staffName || ('坐席' + sid);
-      if (!agentsMap[sid]) {
-        agentsMap[sid] = { id: sid, name: sname, totalSessions: 0 };
-      }
-      agentsMap[sid].totalSessions++;
-    }
-    cachedAgents = Object.values(agentsMap).sort((a, b) => b.totalSessions - a.totalSessions);
-    fillAgentSelect(cachedAgents);
-  } catch (e) {
-    showToast('无法加载缓存数据: ' + e.message, 'error');
-  }
 }
 
 async function checkCacheStatus() {
@@ -1391,22 +1463,20 @@ async function loadAgentSessions() {
   const agentId = document.getElementById('session-agent-select').value;
   if (!agentId) { showToast('请先选择坐席', 'error'); return; }
 
-  // 静态模式：直接从 JSON 加载
-  if (staticMode) {
+  showLoading('sessions');
+  // 静态模式：从 JSON 文件加载会话
+  if (typeof isStaticMode !== 'undefined' && isStaticMode) {
     try {
-      const resp = await fetch(`data/sessions-${currentDate}.json`);
-      if (!resp.ok) throw new Error('No cache');
-      const data = await resp.json();
-      const sessions = data.sessions || data || [];
-      const filtered = sessions.filter(s => String(s.staffId) === String(agentId));
-      renderSessionsList(filtered, '静态缓存');
+      const dataResp = await fetch('data/sessions-' + currentDate + '.json?_=' + Date.now());
+      const data = await dataResp.json();
+      const sessions = (data.sessions || data || []).filter(s => String(s.staffId) === String(agentId));
+      renderSessionsList(sessions, '静态模式-' + currentDate);
     } catch (e) {
-      showToast('加载会话缓存失败: ' + e.message, 'error');
+      showToast('加载失败: ' + e.message, 'error');
+      hideLoading('sessions');
     }
     return;
   }
-
-  showLoading('sessions');
   // 优先使用缓存接口
   const resp = await apiGet(`/api/sessions/cached?date=${currentDate}&staffId=${agentId}`);
   hideLoading('sessions');
@@ -1735,15 +1805,16 @@ async function openSessionDetail(sessionId) {
   document.getElementById('session-modal-body').innerHTML = `
     <div class="loading show"><div class="spinner"></div><div>加载会话内容...</div></div>`;
 
-  // 静态模式：只显示基本信息，无法获取消息详情
-  if (staticMode) {
-    document.getElementById('session-modal-body').innerHTML = `
-      <div class="empty-state" style="padding:24px">
-        <div class="icon">📋</div>
-        <h3>会话 #${sessionId}</h3>
-        <p style="font-size:13px;color:var(--text-secondary)">静态模式下无法获取详细的会话消息内容。</p>
-        <p style="font-size:13px;color:var(--text-secondary)">请本地运行 Flask 后端查看完整会话详情。</p>
-      </div>`;
+  // 静态模式：无法查看会话详情（需要七鱼API）
+  if (typeof isStaticMode !== 'undefined' && isStaticMode) {
+    const sessions = document.getElementById('session-list')?.dataset?.allSessions;
+    let sessionData = null;
+    if (sessions) {
+      try { sessionData = JSON.parse(sessions).find(s => String(s.id || s.sessionId) === String(sessionId)); } catch(e) {}
+    }
+    document.getElementById('session-modal-body').innerHTML = sessionData
+      ? renderSessionDetail(sessionData)
+      : '<div class="empty-state"><div class="icon">📋</div><h3>静态模式下不支持查看会话消息</h3><p>请使用本地 Flask 版本查看完整会话详情</p></div>';
     return;
   }
 
@@ -1960,41 +2031,29 @@ function viewAgentSessions(agentId) {
 
 // ==================== 初始化 ====================
 
-let staticMode = false;
-
 async function init() {
-  // 检测是否为静态模式（GitHub Pages）
+  // 静态模式检测：如果 API 不可用（GitHub Pages），降级到会话查看模式
   try {
-    const configResp = await fetch('/api/config');
-    if (!configResp.ok) throw new Error('API unavailable');
-    staticMode = false;
-  } catch (e) {
-    staticMode = true;
-  }
-
-  if (staticMode) {
-    document.getElementById('static-mode-banner').classList.add('show');
-    // 隐藏不可用的菜单
-    const navItems = document.querySelectorAll('.nav-item');
-    // 只保留会话分析入口，其他全隐藏
-    for (const item of navItems) {
-      const page = item.getAttribute('onclick') || '';
-      if (page.indexOf('sessions') === -1) {
-        item.style.display = 'none';
+    const configResp = await apiGet('/api/config');
+    if (configResp.code === 200) {
+      // 本地 Flask 模式：正常加载
+      isStaticMode = false;
+      loadDashboard();
+      if (!configResp.data.configured) {
+        setTimeout(() => openSettings(), 500);
       }
+    } else {
+      throw new Error('API unreachable');
     }
-    // 自动切到会话页
-    setTimeout(() => switchPage('sessions'), 300);
-    return;
-  }
-
-  await checkConfig();
-  loadDashboard();
-
-  // 如果未配置，自动弹出设置框
-  const configResp = await apiGet('/api/config');
-  if (configResp.code === 200 && !configResp.data.configured) {
-    setTimeout(() => openSettings(), 500);
+  } catch (e) {
+    // 静态模式：GitHub Pages 无后端
+    isStaticMode = true;
+    document.getElementById('static-mode-banner').classList.add('show');
+    // 隐藏需要 API 的导航项
+    const navReport = document.querySelector('.nav-item[data-page="report"]');
+    if (navReport) navReport.style.display = 'none';
+    // 自动切换到会话查看页
+    switchPage('sessions');
   }
 }
 
