@@ -999,7 +999,18 @@ async function loadDashboard() {
   const chartWrapper = document.getElementById('dashboardChart').parentElement;
   chartWrapper.querySelectorAll('.chart-placeholder').forEach(el => el.remove());
 
-  showLoading('dashboard');
+  const days = getDaysSpan();
+
+  // 多天时显示加载进度提示
+  if (days > 1) {
+    const loadingEl = document.getElementById('dashboard-loading');
+    loadingEl.classList.add('show');
+    const estSec = days * 3 + 2;
+    loadingEl.innerHTML = `<div class="spinner"></div><div>正在统计 ${days} 天数据...</div><div style="font-size:12px;color:#999;margin-top:4px">预计需要 ${estSec} 秒，请耐心等待</div>`;
+  } else {
+    showLoading('dashboard');
+  }
+
   const resp = await apiGet(dateUrl('/api/stats/overview'));
 
   if (resp.code === 401) {
@@ -1024,33 +1035,41 @@ async function loadDashboard() {
         <h3>数据加载失败</h3>
         <p>${resp.message || '请检查API配置和网络连接'}</p>
       </div>`;
-    // 仍然加载趋势图（出错也要清理 chart 区域）
     trendChartTimer = setTimeout(() => loadTrendChart(null, resp.message), 1000);
     return;
   }
 
   const data = resp.data;
-  const days = getDaysSpan();
 
   // 日期范围标签
   let dateLabel = data.date;
+  // 多天聚合时显示数据完整性提示
+  const validInfo = data.validDays !== undefined ? `（${data.validDays}/${data.totalDays} 天获取成功）` : '';
   if (days > 1) {
-    dateLabel = `${currentDate} ~ ${currentEndDate}（总览仅展示最后一天 ${data.date}）`;
+    dateLabel = `${data.date} ${validInfo}`;
   }
 
   const cards = [
-    { label: '总会话量', value: data.totalSessions, cls: 'primary', sub: `有效会话 ${data.effectiveSessions}` },
-    { label: '总消息量', value: data.totalMessages, cls: 'primary', sub: `咨询量 ${data.totalConsultCount}` },
+    { label: '总会话量', value: formatNum(data.totalSessions), cls: 'primary', sub: `有效会话 ${formatNum(data.effectiveSessions)}` },
+    { label: '总消息量', value: formatNum(data.totalMessages), cls: 'primary', sub: `咨询量 ${formatNum(data.totalConsultCount)}` },
     { label: '应答率', value: data.answerRatio + '%', cls: data.answerRatio >= 85 ? 'success' : 'warning', sub: '' },
     { label: '满意度', value: data.satisfactionRatio + '%', cls: data.satisfactionRatio >= 80 ? 'success' : 'warning', sub: `参评率 ${data.evaRatio}%` },
     { label: '平均首次响应', value: formatDuration(data.avgFirstRespTime), cls: 'primary', sub: `平均响应 ${formatDuration(data.avgRespTime)}` },
     { label: '一次性解决率', value: data.oneOffRatio + '%', cls: data.oneOffRatio >= 60 ? 'success' : 'warning', sub: '' },
-    { label: '排队总量', value: data.queueCount, cls: data.queueCount > 10 ? 'warning' : 'success', sub: `最长排队 ${formatDuration(data.maxQueueTime)}` },
-    { label: '登录坐席', value: data.loginStaffCount, cls: 'primary', sub: `访问量 ${data.visitCount}` },
+    { label: '排队总量', value: formatNum(data.queueCount), cls: data.queueCount > 10 ? 'warning' : 'success', sub: `最长排队 ${formatDuration(data.maxQueueTime)}` },
+    { label: '登录坐席', value: data.loginStaffCount, cls: 'primary', sub: `访问量 ${formatNum(data.visitCount)}` },
   ];
+
+  // 部分天失败时的警告
+  let warnBanner = '';
+  if (data.errors && data.errors.length > 0) {
+    const errDates = data.errors.map(e => e.date.slice(5)).join(', ');
+    warnBanner = `<div class="date-range-banner" style="grid-column: 1/-1;font-size:12px;color:#c2410c;margin-bottom:4px;background:#fff7ed;padding:4px 10px;border-radius:6px;border:1px solid #fed7aa">⚠️ ${errDates} 获取失败（可能无数据或频率限制）</div>`;
+  }
 
   document.getElementById('overview-cards').innerHTML =
     `<div class="date-range-banner" style="grid-column: 1/-1;font-size:12px;color:var(--text-secondary);margin-bottom:4px">${dateLabel}</div>` +
+    warnBanner +
     cards.map(c =>
     `<div class="stat-card">
       <div class="label">${c.label}</div>
@@ -1062,8 +1081,13 @@ async function loadDashboard() {
   document.getElementById('dashboard-content').style.display = 'block';
   hideLoading('dashboard');
 
-  // 趋势图延迟加载
-  trendChartTimer = setTimeout(() => loadTrendChart(data), 2000);
+  // 趋势图加载：多天优先使用 overview 返回的 daily 数据（无需额外调 API）
+  if (days > 1 && data.daily && data.daily.length > 0) {
+    // 直接使用 overview 返回的 daily 数据绘制趋势图
+    trendChartTimer = setTimeout(() => loadTrendChartFromDaily(data.daily, data.errors), 500);
+  } else {
+    trendChartTimer = setTimeout(() => loadTrendChart(data), 2000);
+  }
 }
 
 let trendChartTimer = null;
@@ -1211,6 +1235,72 @@ async function loadTrendChart(overviewData, overviewError) {
       }
     });
   }
+  trendLoading = false;
+}
+
+// 直接使用 overview API 返回的 daily 数据绘制趋势图（避免额外API调用）
+async function loadTrendChartFromDaily(dailyPoints, errors) {
+  if (trendLoading) return;
+  trendLoading = true;
+
+  if (dashboardChart) dashboardChart.destroy();
+  dashboardChart = null;
+
+  const ctx = document.getElementById('dashboardChart').getContext('2d');
+  const chartWrapper = document.getElementById('dashboardChart').parentElement;
+  chartWrapper.querySelectorAll('.chart-placeholder').forEach(el => el.remove());
+
+  if (!dailyPoints || dailyPoints.length === 0) {
+    const emptyEl = document.createElement('div');
+    emptyEl.className = 'chart-placeholder';
+    emptyEl.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;color:var(--text-secondary);z-index:1;text-align:center';
+    emptyEl.innerHTML = '<div style="font-size:32px;margin-bottom:8px">📊</div><div>暂无趋势数据</div>';
+    chartWrapper.appendChild(emptyEl);
+    trendLoading = false;
+    return;
+  }
+
+  // 部分日期失败提示
+  if (errors && errors.length > 0) {
+    const warnEl = document.createElement('div');
+    warnEl.className = 'chart-placeholder';
+    warnEl.style.cssText = 'position:absolute;top:4px;right:8px;font-size:11px;color:#c2410c;z-index:1;background:#fff7ed;padding:2px 8px;border-radius:4px;border:1px solid #fed7aa';
+    const errDates = errors.map(p => p.date.slice(5)).join(', ');
+    warnEl.textContent = `⚠ ${errDates} 获取失败`;
+    chartWrapper.appendChild(warnEl);
+  }
+
+  const labels = dailyPoints.map(p => (p.date || '').slice(5)); // MM-DD
+  const COLORS = ['#3b6df0', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6'];
+
+  dashboardChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '总会话量', data: dailyPoints.map(p => p.totalSessions || 0), borderColor: COLORS[0], backgroundColor: COLORS[0] + '20', tension: 0.3, pointRadius: 4 },
+        { label: '有效会话量', data: dailyPoints.map(p => p.effectiveSessions || 0), borderColor: COLORS[1], backgroundColor: COLORS[1] + '20', tension: 0.3, pointRadius: 4 },
+        { label: '应答率(%)', data: dailyPoints.map(p => p.answerRatio || 0), borderColor: COLORS[2], backgroundColor: COLORS[2] + '20', tension: 0.3, pointRadius: 4, yAxisID: 'y1' },
+        { label: '满意度(%)', data: dailyPoints.map(p => p.satisfactionRatio || 0), borderColor: COLORS[3], backgroundColor: COLORS[3] + '20', tension: 0.3, pointRadius: 4, yAxisID: 'y1' },
+        { label: '一次性解决率(%)', data: dailyPoints.map(p => p.oneOffRatio || 0), borderColor: COLORS[4], backgroundColor: COLORS[4] + '20', tension: 0.3, pointRadius: 4, yAxisID: 'y1' },
+        { label: '排队量', data: dailyPoints.map(p => p.queueCount || 0), borderColor: COLORS[5], backgroundColor: COLORS[5] + '20', tension: 0.3, pointRadius: 4, borderDash: [5,3] }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 12, padding: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx2 => ctx2.dataset.label + ': ' + ctx2.parsed.y.toLocaleString() } }
+      },
+      scales: {
+        y: { type: 'linear', position: 'left', title: { display: true, text: '数量' }, beginAtZero: true },
+        y1: { type: 'linear', position: 'right', title: { display: true, text: '比率 (%)' }, min: 0, max: 100, grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+
   trendLoading = false;
 }
 
@@ -1683,6 +1773,13 @@ function statItem(label, value, quality) {
   let cls = 'stat-item';
   if (quality) cls += ' stat-' + quality;
   return `<div class="${cls}"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`;
+}
+
+function formatNum(n) {
+  if (n === null || n === undefined) return '0';
+  const num = Number(n);
+  if (num >= 10000) return (num / 10000).toFixed(1) + '万';
+  return num.toLocaleString('zh-CN');
 }
 
 function escapeHtml(str) {

@@ -121,65 +121,152 @@ def api_call_with_retry(fn, *args, max_retries=4):
 
 @app.route('/api/stats/overview', methods=['GET'])
 def api_overview():
-    """获取数据总览。多天时只查最后一天，趋势由 /trend 端点提供"""
+    """获取数据总览。多天时逐天查询后聚合，同时返回 daily 数组供趋势图直接使用"""
     date_str = request.args.get('date')
     days = request.args.get('days', type=int)
-
-    # 多天时不跨天查询——七鱼对跨天查询限制极严，直接 14009
-    # 改为查询最后一天（结束日期），趋势图表负责多天展示
-    if days and days > 1:
-        dt = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-        end_dt = dt + datetime.timedelta(days=days - 1)
-        query_date = end_dt.strftime('%Y-%m-%d')
-    else:
-        query_date = date_str
-
-    start_ms, end_ms, actual_date = get_timestamp_range(query_date)
 
     api = QiyuAPI()
     if not api.app_key or not api.app_secret:
         return jsonify({"code": 401, "message": "请先配置 AppKey 和 AppSecret"})
 
-    # 缓存
     import time as time_mod
+
+    # ---- 多天聚合模式 ----
+    if days and days > 1:
+        china_tz = datetime.timezone(datetime.timedelta(hours=8))
+        base_dt = datetime.datetime.strptime(date_str, '%Y-%m-%d').replace(tzinfo=china_tz)
+        total_days = days
+
+        daily_data = []
+        errors = []
+
+        for i in range(total_days):
+            day_dt = base_dt + datetime.timedelta(days=i)
+            day_str = day_dt.strftime('%Y-%m-%d')
+            day_start_ms, day_end_ms, _ = get_timestamp_range(day_str, days=1)
+
+            # 检查缓存（10分钟有效）
+            cache_key = get_cache_key('overview', day_str)
+            cached = cache.get(cache_key)
+            if cached and (time_mod.time() - cached[0] < 600):
+                cached_point = cached[1].get('data', {})
+                daily_data.append(_extract_daily_point(day_str, cached_point))
+                continue
+
+            # 首日加初始延迟，避免紧贴上一个API请求
+            if i == 0:
+                time_mod.sleep(2)
+
+            result = api_call_with_retry(api.get_overview, day_start_ms, day_end_ms, max_retries=5)
+
+            if result.get('code') == 200:
+                raw = result.get('message', {})
+                point = _extract_daily_point(day_str, raw)
+                daily_data.append(point)
+
+                # 写缓存
+                cache_data = {"code": 200, "data": {"date": day_str, **point}}
+                cache[cache_key] = (time_mod.time(), cache_data)
+            else:
+                errors.append({
+                    "date": day_str,
+                    "code": result.get('code'),
+                    "message": result.get('message', 'API调用失败')
+                })
+                daily_data.append(None)
+
+            # 日间间隔（加大到 2 秒，减少 14009 频率限制）
+            if i < total_days - 1:
+                time_mod.sleep(2)
+
+        # 过滤出有效天数据
+        valid_days = [d for d in daily_data if d is not None]
+
+        if not valid_days:
+            return jsonify({
+                "code": 500,
+                "message": f"所有 {total_days} 天数据获取均失败，可能是API频率限制（14009）",
+                "data": {"errors": errors, "daily": [], "days": total_days}
+            })
+
+        # ---- 聚合统计 ----
+        # 累加字段
+        total_sessions = sum(d.get('totalSessions', 0) for d in valid_days)
+        effective_sessions = sum(d.get('effectiveSessions', 0) for d in valid_days)
+        total_messages = sum(d.get('totalMessages', 0) for d in valid_days)
+        queue_count = sum(d.get('queueCount', 0) for d in valid_days)
+        visit_count = sum(d.get('visitCount', 0) for d in valid_days)
+        total_consult = sum(d.get('totalConsultCount', 0) for d in valid_days)
+
+        # 取最大值的字段
+        login_staff = max(d.get('loginStaffCount', 0) for d in valid_days)
+        max_queue = max(d.get('maxQueueTime', 0) for d in valid_days)
+
+        # 比率字段按总会话量加权平均
+        def weighted_avg(field):
+            total_w = sum(d.get('totalSessions', 0) for d in valid_days)
+            if total_w == 0:
+                return 0
+            return round(sum(d.get(field, 0) * d.get('totalSessions', 0) for d in valid_days) / total_w, 1)
+
+        # 时间类字段按总会话量加权平均（保持 ms）
+        def weighted_avg_ms(field):
+            total_w = sum(d.get('totalSessions', 0) for d in valid_days)
+            if total_w == 0:
+                return 0
+            return round(sum(d.get(field, 0) * d.get('totalSessions', 0) for d in valid_days) / total_w)
+
+        overview = {
+            "date": f"{date_str} ~ {valid_days[-1]['date']}",
+            "days": total_days,
+            "totalSessions": total_sessions,
+            "effectiveSessions": effective_sessions,
+            "assignedRatio": weighted_avg('assignedRatio'),
+            "totalMessages": total_messages,
+            "answerRatio": weighted_avg('answerRatio'),
+            "satisfactionRatio": weighted_avg('satisfactionRatio'),
+            "avgFirstRespTime": weighted_avg_ms('avgFirstRespTime'),
+            "avgRespTime": weighted_avg_ms('avgRespTime'),
+            "avgSessionTime": weighted_avg_ms('avgSessionTime'),
+            "evaRatio": weighted_avg('evaRatio'),
+            "queueCount": queue_count,
+            "maxQueueTime": max_queue,
+            "oneOffRatio": weighted_avg('oneOffRatio'),
+            "loginStaffCount": login_staff,
+            "visitCount": visit_count,
+            "totalConsultCount": total_consult,
+            # 每日明细供趋势图使用
+            "daily": valid_days,
+            "errors": errors if errors else None,
+            "validDays": len(valid_days),
+            "totalDays": total_days,
+        }
+
+        return jsonify({"code": 200, "data": overview})
+
+    # ---- 单天模式（原逻辑）----
+    query_date = date_str
+    start_ms, end_ms, actual_date = get_timestamp_range(query_date)
+
     cache_key = get_cache_key('overview', actual_date)
-    cache_ttl = 300  # 单天缓存5分钟
+    cache_ttl = 300
     if cache_key in cache:
         cached_time, cached_data = cache[cache_key]
         if time_mod.time() - cached_time < cache_ttl:
             return jsonify(cached_data)
 
-    # 指数退避重试
     result = api_call_with_retry(api.get_overview, start_ms, end_ms)
 
     if result.get('code') == 200:
         data = result.get('message', {})
-        # 七鱼overview API返回的比率是小数形式(0-1)，转为百分比显示
-        def to_pct(v):
-            if v is None or v < 0:
-                return 0
-            return round(v * 100, 1) if isinstance(v, float) and v <= 1 else v
-        
+        point = _extract_daily_point(actual_date, data)
+
         overview = {
             "date": actual_date,
             "days": days or 1,
-            "totalSessions": data.get('sessions', 0),              # 总会话量
-            "effectiveSessions": data.get('effectSessions', 0),     # 有效会话量
-            "assignedRatio": to_pct(data.get('assignedRatio', 0)),   # 分配率
-            "totalMessages": data.get('messages', 0),               # 总消息量
-            "answerRatio": to_pct(data.get('answerRatio', 0)),      # 应答率
-            "satisfactionRatio": to_pct(data.get('satisfactionRatio', 0)),  # 满意度
-            "avgFirstRespTime": data.get('avgFirstRespTime', 0),    # 平均首次响应时长(ms)
-            "avgRespTime": data.get('avgRespTime', 0),                # 平均响应时长(ms)
-            "avgSessionTime": data.get('avgTime', 0),               # 平均会话时长(ms)
-            "evaRatio": to_pct(data.get('evaRatio', 0)),            # 参评率
-            "queueCount": data.get('queueCount', 0),                # 排队总量
-            "maxQueueTime": data.get('maxQueueTime', 0),            # 最长排队时长(秒)
-            "oneOffRatio": to_pct(data.get('oneOffRatio', 0)),      # 一次性解决率
-            "loginStaffCount": data.get('loginStaffCount', 0),      # 登录坐席数
-            "visitCount": data.get('visit', 0),                     # 访问量
-            "totalConsultCount": data.get('totalConsultCount', 0),  # 总咨询量
-            "raw": data
+            **point,
+            "raw": data,
+            "daily": [point],  # 单天也提供 daily，保持一致性
         }
         result_data = {"code": 200, "data": overview}
         cache[cache_key] = (time_mod.time(), result_data)
@@ -187,6 +274,40 @@ def api_overview():
     else:
         return jsonify({"code": result.get('code', 500),
                         "message": result.get('message', 'API调用失败')})
+
+
+def _extract_daily_point(date_str, raw_or_data):
+    """从 API 原始数据或已解析数据中提取每日指标点"""
+    # 兼容 raw 和已解析的 data
+    if isinstance(raw_or_data, dict):
+        d = raw_or_data
+    else:
+        d = {}
+
+    def to_pct(v):
+        if v is None or v < 0:
+            return 0
+        return round(v * 100, 1) if isinstance(v, float) and v <= 1 else v
+
+    return {
+        "date": date_str,
+        "totalSessions": d.get('sessions', d.get('totalSessions', 0)),
+        "effectiveSessions": d.get('effectSessions', d.get('effectiveSessions', 0)),
+        "assignedRatio": to_pct(d.get('assignedRatio', 0)),
+        "totalMessages": d.get('messages', d.get('totalMessages', 0)),
+        "answerRatio": to_pct(d.get('answerRatio', 0)),
+        "satisfactionRatio": to_pct(d.get('satisfactionRatio', 0)),
+        "avgFirstRespTime": d.get('avgFirstRespTime', 0),
+        "avgRespTime": d.get('avgRespTime', 0),
+        "avgSessionTime": d.get('avgTime', d.get('avgSessionTime', 0)),
+        "evaRatio": to_pct(d.get('evaRatio', 0)),
+        "queueCount": d.get('queueCount', 0),
+        "maxQueueTime": d.get('maxQueueTime', 0),
+        "oneOffRatio": to_pct(d.get('oneOffRatio', 0)),
+        "loginStaffCount": d.get('loginStaffCount', 0),
+        "visitCount": d.get('visit', d.get('visitCount', 0)),
+        "totalConsultCount": d.get('totalConsultCount', 0),
+    }
 
 
 @app.route('/api/stats/overview/trend', methods=['GET'])
@@ -219,12 +340,12 @@ def api_overview_trend():
             trend_points.append(_extract_trend_point(day_str, overview_data))
             continue
 
-        # 仅首次API调用前加短暂间隔，避免紧跟前一个请求
+        # 首次API调用前加较长间隔，避免紧跟前一个请求触发 14009
         if i == 0:
-            time_mod.sleep(1)
+            time_mod.sleep(2)
 
-        # 指数退避重试
-        result = api_call_with_retry(api.get_overview, day_start_ms, day_end_ms)
+        # 指数退避重试（最多5次重试）
+        result = api_call_with_retry(api.get_overview, day_start_ms, day_end_ms, max_retries=5)
 
         if result.get('code') == 200:
             raw = result.get('message', {})
@@ -254,9 +375,9 @@ def api_overview_trend():
             trend_points.append({"date": day_str, "_error": True, "_errorCode": result.get('code'),
                                  "_errorMsg": result.get('message', 'API调用失败')})
 
-        # 日间间隔 1 秒（减少总等待时间）
+        # 日间间隔 2 秒（减少 14009 频率限制触发概率）
         if i < days - 1:
-            time_mod.sleep(1)
+            time_mod.sleep(2)
 
     return jsonify({"code": 200, "data": {
         "startDate": date_str,
