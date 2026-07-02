@@ -490,15 +490,21 @@ td .grade {
   .main { padding: 16px; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Static mode banner */
+.static-banner {
+  display: none;
+  background: #fff7ed;
+  border-bottom: 2px solid #fdba74;
+  padding: 8px 20px;
+  font-size: 13px;
+  color: #9a3412;
+  text-align: center;
+}
 </style>
 </head>
 <body>
-
-<!-- 静态模式提示横幅 -->
-<div id="staticModeBanner" style="display:none;background:#fef3c7;border-bottom:2px solid #f59e0b;padding:10px 24px;text-align:center;font-size:14px;color:#92400e">
-  ⚠️ 当前为静态模式（GitHub Pages）。实时数据统计请运行 <code style="background:#fde68a;padding:2px 6px;border-radius:4px">cd backend && python app.py</code> 后访问 <a href="http://localhost:5890" style="color:#0369a1;font-weight:bold">localhost:5890</a>
-</div>
-
+<div class="static-banner" id="staticBanner" style="display:none">📦 静态模式 — 仅显示已缓存的会话数据，统计功能不可用。</div>
 <!-- Header -->
 <div class="header">
   <div class="header-left">
@@ -751,7 +757,6 @@ td .grade {
 // ==================== 全局状态 ====================
 const API_BASE = '';
 let currentDate = getYesterdayStr();
-let staticMode = false;
 let dashboardChart = null;
 let agentsChart = null;
 let reportRadarChart = null;
@@ -1254,61 +1259,63 @@ function fillAgentSelect(agents) {
 // ==================== 3. 会话分析 ====================
 
 async function loadSessionsPage() {
-  // 查看缓存状态（优先使用后端接口）
-  checkCacheStatus();
-
+  // 静态模式：从 JSON 文件加载坐席列表
   if (staticMode) {
-    // 静态模式：直接从 data/latest.json 拉取缓存日期信息
+    showLoading('sessions');
     try {
-      const latestResp = await fetch('data/latest.json?' + Date.now());
-      const latest = await latestResp.json();
+      const resp = await fetch(`data/latest.json?t=${Date.now()}`);
+      const latest = await resp.json();
       const dates = latest.sessionDates || [];
+      // 从最新日期的数据中提取坐席信息
       if (dates.length > 0) {
-        showToast('缓存日期: ' + dates.join(', '));
-        // 自动选最近日期
-        currentDate = dates[dates.length - 1];
-        document.getElementById('session-date').value = currentDate;
-      }
-      // 从缓存数据提取坐席列表
-      if (dates.length > 0 && cachedAgents.length === 0) {
-        const lastDate = dates[dates.length - 1];
-        const dataResp = await fetch('data/sessions-' + lastDate + '.json?' + Date.now());
-        const data = await dataResp.json();
-        const sessions = data.sessions || data || [];
+        const dateStr = dates[dates.length - 1];
+        const sessionResp = await fetch(`data/sessions-${dateStr}.json?t=${Date.now()}`);
+        const sessionData = await sessionResp.json();
+        const sessions = sessionData.sessions || [];
+        // 从会话中提取 unique 坐席
         const agentMap = {};
         for (const s of sessions) {
           const sid = s.staffId;
-          const name = s.staffName || '';
+          const sname = s.staffName || '';
           if (sid && !agentMap[sid]) {
-            agentMap[sid] = { id: sid, name: name, account: name };
+            agentMap[sid] = { id: sid, name: sname, account: sname, count: 0 };
           }
+          if (sid) agentMap[sid].count++;
         }
-        cachedAgents = Object.values(agentMap);
+        cachedAgents = Object.values(agentMap).sort((a,b) => b.count - a.count);
         fillAgentSelect(cachedAgents);
       }
     } catch (e) {
-      showToast('加载缓存数据失败: ' + e.message, 'warn');
+      showToast('加载静态数据失败: ' + e.message, 'error');
     }
     hideLoading('sessions');
     document.getElementById('sessions-content').style.display = 'block';
     return;
   }
 
-  // 优先使用缓存的坐席数据
+  // 优先使用缓存的坐席数据，没有则重新拉取（不重复打API）
   if (cachedAgents.length > 0) {
     fillAgentSelect(cachedAgents);
   } else {
     showLoading('sessions');
-    const resp = await apiGet(dateUrl('/api/stats/agents'));
-    hideLoading('sessions');
-    if (resp.code === 200) {
-      cachedAgents = resp.data.agents || [];
-      fillAgentSelect(cachedAgents);
-    } else {
-      showToast('加载坐席列表失败: ' + (resp.message || ''), 'error');
+    try {
+      const resp = await apiGet(dateUrl('/api/stats/agents'));
+      hideLoading('sessions');
+      if (resp.code === 200) {
+        cachedAgents = resp.data.agents || [];
+        fillAgentSelect(cachedAgents);
+      } else {
+        showToast('加载坐席列表失败: ' + (resp.message || ''), 'error');
+      }
+    } catch (e) {
+      hideLoading('sessions');
+      showToast('无法连接后端，请使用本地 Flask 版本', 'error');
+      return;
     }
   }
 
+  // 检查缓存状态
+  checkCacheStatus();
   hideLoading('sessions');
   document.getElementById('sessions-content').style.display = 'block';
 }
@@ -1359,21 +1366,31 @@ async function loadAgentSessions() {
   const agentId = document.getElementById('session-agent-select').value;
   if (!agentId) { showToast('请先选择坐席', 'error'); return; }
 
+  // 静态模式：从 JSON 文件加载
   if (staticMode) {
-    // 静态模式：从本地 data/ JSON 文件过滤
     showLoading('sessions');
     try {
-      const dataResp = await fetch('data/sessions-' + currentDate + '.json?' + Date.now());
-      const data = await dataResp.json();
-      const sessions = data.sessions || data || [];
-      const filtered = sessions.filter(s => String(s.staffId) === String(agentId));
+      const resp = await fetch(`data/latest.json?t=${Date.now()}`);
+      const latest = await resp.json();
+      const dates = latest.sessionDates || [];
+      if (dates.length === 0) {
+        showToast('暂无缓存数据', 'error');
+        return;
+      }
+      const dateStr = dates[dates.length - 1];
+      const sessionResp = await fetch(`data/sessions-${dateStr}.json?t=${Date.now()}`);
+      const sessionData = await sessionResp.json();
+      const allSessions = sessionData.sessions || [];
+      // 按坐席过滤
+      const agentSessions = allSessions.filter(s => String(s.staffId) === String(agentId));
       hideLoading('sessions');
-      renderSessionsList(filtered, '数据来源：本地缓存');
+      renderSessionsList(agentSessions, `静态数据 · ${dateStr} · ${agentSessions.length}条`);
+      return;
     } catch (e) {
       hideLoading('sessions');
-      showToast('加载缓存数据失败: ' + e.message, 'error');
+      showToast('加载静态数据失败: ' + e.message, 'error');
+      return;
     }
-    return;
   }
 
   showLoading('sessions');
@@ -1511,7 +1528,16 @@ async function loadAgentSummaryCore(deep) {
     // ---- 深度分析内容 ----
     if (d.deepAnalysis) {
       const da = d.deepAnalysis;
-      html += '<h4 style="font-size:14px;color:#7c3aed;margin:16px 0 8px">🔬 会话内容分析（采样 ' + (da.analyzedCount || 0) + ' 条会话消息）</h4>';
+      const analyzedOk = (da.analyzedCount || 0) > 0;
+      html += '<h4 style="font-size:14px;color:#7c3aed;margin:16px 0 8px">🔬 会话内容分析（采样 ' + (da.totalSampled || 0) + ' 条，成功分析 ' + (da.analyzedCount || 0) + ' 条）</h4>';
+
+      // 显示错误信息
+      if (da.fetchErrors && da.fetchErrors.length > 0) {
+        html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#991b1b">';
+        html += '<strong>⚠️ 获取消息时遇到问题：</strong><br>';
+        html += da.fetchErrors.map(e => '· ' + escapeHtml(e)).join('<br>');
+        html += '</div>';
+      }
 
       // 常见问题
       if (da.commonIssues && da.commonIssues.length > 0) {
@@ -1554,6 +1580,11 @@ async function loadAgentSummaryCore(deep) {
             <p style="margin:6px 0 0;font-size:13px;color:var(--text-secondary)">${escapeHtml(ss.userSample)}</p>
           </div>`;
         }
+      }
+
+      // 如果完全失败但无具体内容显示
+      if (!analyzedOk && !(da.commonIssues && da.commonIssues.length > 0)) {
+        html += '<div class="empty-state" style="padding:16px"><p style="color:#991b1b">深度分析未能获取到有效的会话消息。可能原因：API权限不足、会话消息已过期、或所选会话仅有图片/系统消息。</p></div>';
       }
     }
 
@@ -1652,38 +1683,21 @@ async function openSessionDetail(sessionId) {
   const modal = document.getElementById('sessionModal');
   modal.classList.add('show');
   document.getElementById('session-modal-title').textContent = `会话 #${sessionId}`;
-  document.getElementById('session-modal-body').innerHTML = `
-    <div class="loading show"><div class="spinner"></div><div>加载会话内容...</div></div>`;
 
+  // 静态模式：无后端，显示基本信息而非详细内容
   if (staticMode) {
-    // 静态模式：从本地缓存查找会话元数据展示
-    try {
-      const dataResp = await fetch('data/sessions-' + currentDate + '.json?' + Date.now());
-      const data = await dataResp.json();
-      const sessions = data.sessions || data || [];
-      const session = sessions.find(s => String(s.id) === String(sessionId));
-      if (!session) {
-        document.getElementById('session-modal-body').innerHTML = `
-          <div class="empty-state"><div class="icon">❌</div><h3>未找到会话</h3><p>缓存中没有该会话数据</p></div>`;
-        return;
-      }
-      let html = '<div style="padding:16px">';
-      html += `<p><strong>分类：</strong>${escapeHtml(session.category || '未知')} / ${escapeHtml(session.categoryDetail || '')}</p>`;
-      html += `<p><strong>坐席：</strong>${escapeHtml(session.staffName || '')}</p>`;
-      html += `<p><strong>状态：</strong>${session.status === 1 ? '已解决' : '未解决'}</p>`;
-      html += `<p><strong>有效期：</strong>${session.isValid === 1 ? '有效' : '无效'}</p>`;
-      html += `<p><strong>开始时间：</strong>${session.startTime ? new Date(session.startTime).toLocaleString() : '-'}</p>`;
-      html += `<p><strong>时长：</strong>${Math.round((session.sessionDuration || 0) / 1000)}秒</p>`;
-      html += `<p><strong>消息数：</strong>客服${session.staffMessageCount || 0}条 / 访客${session.userMessageCount || 0}条</p>`;
-      html += `<p style="margin-top:12px;color:var(--text-secondary);font-size:13px">⚠️ 静态模式下不支持查看消息详情，请本地运行 Flask 后端</p>`;
-      html += '</div>';
-      document.getElementById('session-modal-body').innerHTML = html;
-    } catch (e) {
-      document.getElementById('session-modal-body').innerHTML = `
-        <div class="empty-state"><div class="icon">❌</div><h3>加载失败</h3><p>${escapeHtml(e.message)}</p></div>`;
-    }
+    document.getElementById('session-modal-body').innerHTML = `
+      <div class="empty-state">
+        <div class="icon">📦</div>
+        <h3>静态模式</h3>
+        <p>会话详情需要在本地 Flask 版本中查看。当前页面仅支持查看会话列表。</p>
+        <p style="font-size:13px;color:var(--text-secondary)">会话ID: ${sessionId}</p>
+      </div>`;
     return;
   }
+
+  document.getElementById('session-modal-body').innerHTML = `
+    <div class="loading show"><div class="spinner"></div><div>加载会话内容...</div></div>`;
 
   const resp = await apiGet(`/api/sessions/${sessionId}`);
 
@@ -1898,32 +1912,37 @@ function viewAgentSessions(agentId) {
 
 // ==================== 初始化 ====================
 
+let staticMode = false;
+
 async function init() {
-  const configResp = await apiGet('/api/config');
-  if (configResp.code === -1) {
-    // 无后端：显示静态模式横幅，直接进入会话页
-    staticMode = true;
-    document.getElementById('staticModeBanner').style.display = 'block';
-    // 隐藏 Header 设置按钮（在静态模式下不可用）
-    const settingsBtn = document.getElementById('btn-settings');
-    if (settingsBtn) settingsBtn.style.display = 'none';
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    const sessionsNav = document.querySelector('[data-page="sessions"]');
-    if (sessionsNav) sessionsNav.classList.add('active');
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const sessionsPage = document.getElementById('page-sessions');
-    if (sessionsPage) sessionsPage.classList.add('active');
-    loadSessionsPage();
-    return;
+  // 检测是否为静态模式（GitHub Pages）
+  try {
+    const configResp = await apiGet('/api/config');
+    if (configResp.code === 200) {
+      // Flask 模式
+      staticMode = false;
+      await checkConfig();
+      loadDashboard();
+      if (!configResp.data.configured) {
+        setTimeout(() => openSettings(), 500);
+      }
+    } else {
+      enterStaticMode();
+    }
+  } catch (e) {
+    // 无法连接后端，进入静态模式
+    enterStaticMode();
   }
+}
 
-  await checkConfig();
-  loadDashboard();
-
-  // 如果未配置，自动弹出设置框
-  if (configResp.code === 200 && !configResp.data.configured) {
-    setTimeout(() => openSettings(), 500);
-  }
+function enterStaticMode() {
+  staticMode = true;
+  document.getElementById('staticBanner').style.display = 'block';
+  // 隐藏统计菜单
+  document.getElementById('nav-overview').style.display = 'none';
+  document.getElementById('nav-report').style.display = 'none';
+  // 自动跳转到会话页面
+  navigateTo('sessions');
 }
 
 // 点击空白关闭弹窗

@@ -701,9 +701,13 @@ def api_cached_sessions():
     })
 
 
-@app.route('/api/sessions/agent/<int:agent_id>/summary', methods=['GET'])
-def api_agent_summary(agent_id):
+@app.route('/api/sessions/agent/<string:agent_id_str>/summary', methods=['GET'])
+def api_agent_summary(agent_id_str):
     """生成指定坐席的会话概括总结，支持 deep 模式获取实际消息内容"""
+    try:
+        agent_id = int(agent_id_str)
+    except ValueError:
+        return jsonify({"code": 400, "message": "无效的坐席ID", "data": None})
     date_str = request.args.get('date')
     if not date_str:
         date_str = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
@@ -733,9 +737,9 @@ def api_agent_summary(agent_id):
         api = QiyuAPI()
         if api.app_key and api.app_secret:
             deep_data = analyze_agent_content_deeply(sessions, agent_id, api)
-            if deep_data:
-                summary_data['deepAnalysis'] = deep_data
-                # 将内容发现融入总结文本
+            summary_data['deepAnalysis'] = deep_data
+            # 将内容发现融入总结文本（仅当分析成功时）
+            if deep_data.get('analyzedCount', 0) > 0:
                 deep_parts = []
                 if deep_data.get('commonIssues'):
                     issues_text = '、'.join([i['issue'] for i in deep_data['commonIssues'][:5]])
@@ -748,6 +752,18 @@ def api_agent_summary(agent_id):
                     deep_parts.append(f"常见解决方案：{patterns_text}")
                 if deep_parts:
                     summary_data['summary'] += "\\n\\n📝 **会话内容分析**：" + "；".join(deep_parts) + "。"
+        else:
+            summary_data['deepAnalysis'] = {
+                "analyzedCount": 0,
+                "totalSampled": 0,
+                "commonIssues": [],
+                "topPhrases": [],
+                "userComplaints": [],
+                "resolutionPatterns": ["深度分析不可用：缺少七鱼API凭证配置"],
+                "sampleSessions": [],
+                "fetchErrors": ["AppKey或AppSecret未配置"],
+                "analysisMethod": "深度分析（不可用）"
+            }
 
     return jsonify({"code": 200, "data": summary_data})
 
@@ -1036,6 +1052,7 @@ def analyze_agent_content_deeply(sessions: list, agent_id: int, api) -> dict:
     all_session_summaries = []  # 每个会话的简短摘要
     analyzed_count = 0
 
+    fetch_errors = []  # 记录获取消息过程中的错误
     for s in sample_sessions:
         sid = s.get('id')
         if not sid:
@@ -1044,10 +1061,13 @@ def analyze_agent_content_deeply(sessions: list, agent_id: int, api) -> dict:
             time_mod.sleep(0.5)  # 控制 API 频率
             msg_result = api.get_session_messages(sid)
             if msg_result.get('code') != 200:
+                err_msg = msg_result.get('message', '未知错误')
+                fetch_errors.append(f"会话{sid}: API返回code={msg_result.get('code')}, {err_msg}")
                 continue
 
             messages = msg_result.get('data', [])
             if not messages:
+                fetch_errors.append(f"会话{sid}: 无消息内容(可能是纯图片/系统消息)")
                 continue
 
             analyzed_count += 1
@@ -1077,11 +1097,24 @@ def analyze_agent_content_deeply(sessions: list, agent_id: int, api) -> dict:
                 "resolved": s.get('status') == 1
             })
 
-        except Exception:
+        except Exception as e:
+            fetch_errors.append(f"会话{sid}: 异常 - {str(e)[:100]}")
             continue
 
     if analyzed_count == 0:
-        return None
+        # 返回错误信息而不是 None，让前端能看到问题
+        err_summary = '; '.join(fetch_errors[:3]) if fetch_errors else '未能获取任何会话消息内容'
+        return {
+            "analyzedCount": 0,
+            "totalSampled": len(sample_sessions),
+            "commonIssues": [],
+            "topPhrases": [],
+            "userComplaints": [],
+            "resolutionPatterns": [f"深度分析失败：{err_summary}"],
+            "sampleSessions": [],
+            "fetchErrors": fetch_errors[:5],
+            "analysisMethod": "基于会话消息内容的深度分析（失败）"
+        }
 
     # ---- 分析用户消息，提取常见问题 ----
     # 使用关键词匹配识别问题类型

@@ -1450,7 +1450,16 @@ async function loadAgentSummaryCore(deep) {
     // ---- 深度分析内容 ----
     if (d.deepAnalysis) {
       const da = d.deepAnalysis;
-      html += '<h4 style="font-size:14px;color:#7c3aed;margin:16px 0 8px">🔬 会话内容分析（采样 ' + (da.analyzedCount || 0) + ' 条会话消息）</h4>';
+      const analyzedOk = (da.analyzedCount || 0) > 0;
+      html += '<h4 style="font-size:14px;color:#7c3aed;margin:16px 0 8px">🔬 会话内容分析（采样 ' + (da.totalSampled || 0) + ' 条，成功分析 ' + (da.analyzedCount || 0) + ' 条）</h4>';
+
+      // 显示错误信息
+      if (da.fetchErrors && da.fetchErrors.length > 0) {
+        html += '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#991b1b">';
+        html += '<strong>⚠️ 获取消息时遇到问题：</strong><br>';
+        html += da.fetchErrors.map(e => '· ' + escapeHtml(e)).join('<br>');
+        html += '</div>';
+      }
 
       // 常见问题
       if (da.commonIssues && da.commonIssues.length > 0) {
@@ -1493,6 +1502,11 @@ async function loadAgentSummaryCore(deep) {
             <p style="margin:6px 0 0;font-size:13px;color:var(--text-secondary)">${escapeHtml(ss.userSample)}</p>
           </div>`;
         }
+      }
+
+      // 如果完全失败但无具体内容显示
+      if (!analyzedOk && !(da.commonIssues && da.commonIssues.length > 0)) {
+        html += '<div class="empty-state" style="padding:16px"><p style="color:#991b1b">深度分析未能获取到有效的会话消息。可能原因：API权限不足、会话消息已过期、或所选会话仅有图片/系统消息。</p></div>';
       }
     }
 
