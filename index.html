@@ -7,20 +7,42 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root {
-  --bg: #f5f7fa;
-  --card-bg: #fff;
-  --text: #1a1a2e;
-  --text-secondary: #666;
-  --border: #e8ecf1;
-  --primary: #3b6df0;
-  --primary-light: #eef3ff;
+  --bg: #f0f4f8;
+  --card-bg: #ffffff;
+  --text: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+
+  --primary: #6366f1;
+  --primary-dark: #4f46e5;
+  --primary-light: #eef2ff;
+  --primary-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --primary-gradient-hover: linear-gradient(135deg, #4f46e5, #7c3aed);
+
   --success: #10b981;
+  --success-light: #ecfdf5;
   --warning: #f59e0b;
+  --warning-light: #fffbeb;
   --danger: #ef4444;
-  --info: #6366f1;
-  --radius: 12px;
-  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --danger-light: #fef2f2;
+  --info: #06b6d4;
+  --info-light: #ecfeff;
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 8px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 20px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+  --shadow-xl: 0 20px 60px rgba(0,0,0,0.18);
+
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -31,143 +53,206 @@ body {
   color: var(--text);
   line-height: 1.6;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Static mode banner */
-#static-mode-banner { display:none; background:#fff7ed; border-bottom:1px solid #fed7aa; padding:8px 16px; text-align:center; font-size:13px; color:#c2410c; }
-#static-mode-banner.show { display:block; }
+/* ===== STATIC MODE BANNER (GitHub Pages) ===== */
+.static-mode-banner {
+  background: linear-gradient(135deg, #fef3c7, #fffbeb);
+  color: #92400e;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 13px;
+  border-bottom: 1px solid #fde68a;
+  display: none;
+}
+.static-mode .static-mode-banner { display: block; }
+.static-mode .api-dependent { opacity: 0.5; pointer-events: none; }
 
-/* Header */
+/* ===== HEADER ===== */
 .header {
-  background: linear-gradient(135deg, #1e3a5f 0%, #2d5aa0 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 40%, #312e81 100%);
   color: #fff;
-  padding: 0 32px;
-  height: 64px;
+  padding: 0 36px;
+  height: 68px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.18);
   position: sticky;
   top: 0;
   z-index: 100;
+  backdrop-filter: blur(10px);
 }
-.header-left { display: flex; align-items: center; gap: 12px; }
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);
+}
+.header-left { display: flex; align-items: center; gap: 14px; }
 .header-logo {
-  width: 36px; height: 36px;
-  background: rgba(255,255,255,0.2);
-  border-radius: 8px;
+  width: 40px; height: 40px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 20px;
+  font-size: 22px;
+  backdrop-filter: blur(4px);
+  transition: var(--transition);
 }
-.header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
-.header-right { display: flex; align-items: center; gap: 16px; }
+.header-logo:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+.header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; background: linear-gradient(90deg, #e0e7ff, #c7d2fe, #ddd6fe); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.header-right { display: flex; align-items: center; gap: 14px; }
 .header-badge {
-  background: rgba(255,255,255,0.15);
-  padding: 4px 12px;
-  border-radius: 20px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
   font-size: 13px;
+  font-weight: 500;
+  transition: var(--transition);
 }
+.header-badge:hover { background: rgba(255,255,255,0.18); }
 .date-selector {
-  background: rgba(255,255,255,0.15);
-  border: 1px solid rgba(255,255,255,0.25);
-  color: #fff;
-  padding: 6px 12px;
-  border-radius: 6px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #e0e7ff;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
   font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
+  transition: var(--transition);
 }
-.date-selector:focus { outline: none; border-color: rgba(255,255,255,0.5); }
+.date-selector:focus { outline: none; border-color: rgba(255,255,255,0.5); box-shadow: 0 0 0 3px rgba(99,102,241,0.3); }
+.date-selector::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
 .date-range-sep {
-  color: rgba(255,255,255,0.6);
+  color: rgba(255,255,255,0.5);
   font-size: 13px;
-  padding: 0 2px;
+  font-weight: 500;
+  padding: 0 4px;
 }
 
-/* Navigation */
+/* ===== NAVIGATION ===== */
 .nav {
   background: var(--card-bg);
   border-bottom: 1px solid var(--border);
-  padding: 0 32px;
+  padding: 6px 36px;
   display: flex;
-  gap: 4px;
+  gap: 8px;
   position: sticky;
-  top: 64px;
+  top: 68px;
   z-index: 99;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
 }
 .nav-item {
-  padding: 14px 20px;
+  padding: 10px 22px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
   color: var(--text-secondary);
-  border-bottom: 2px solid transparent;
-  transition: all 0.2s;
+  border-radius: var(--radius-pill);
+  transition: all var(--transition);
   white-space: nowrap;
+  position: relative;
+  letter-spacing: 0.2px;
 }
-.nav-item:hover { color: var(--primary); }
+.nav-item:hover { color: var(--primary-dark); background: var(--primary-light); }
 .nav-item.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
-  background: var(--primary-light);
+  color: #fff;
+  background: var(--primary-gradient);
+  box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+  font-weight: 600;
 }
 
-/* Main Content */
-.main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+/* ===== MAIN CONTENT ===== */
+.main { padding: 28px 36px; max-width: 1440px; margin: 0 auto; }
 
 /* Page */
-.page { display: none; }
+.page { display: none; animation: fadeSlideIn 0.3s ease; }
 .page.active { display: block; }
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
-/* Cards */
+/* ===== STAT CARDS ===== */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
 }
 .stat-card {
   background: var(--card-bg);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 22px 24px;
   box-shadow: var(--shadow);
-  transition: box-shadow 0.2s;
+  border: 1px solid var(--border-light);
+  transition: all var(--transition-slow);
+  position: relative;
+  overflow: hidden;
 }
-.stat-card:hover { box-shadow: var(--shadow-md); }
-.stat-card .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
-.stat-card .value { font-size: 28px; font-weight: 700; }
-.stat-card .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 3px;
+  background: var(--primary-gradient);
+  opacity: 0;
+  transition: opacity var(--transition);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.stat-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  border-color: transparent;
+}
+.stat-card:hover::before { opacity: 1; }
+.stat-card .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500; letter-spacing: 0.3px; text-transform: uppercase; }
+.stat-card .value { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
+.stat-card .sub { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
 .stat-card .value.primary { color: var(--primary); }
 .stat-card .value.success { color: var(--success); }
 .stat-card .value.warning { color: var(--warning); }
 .stat-card .value.danger { color: var(--danger); }
 
-/* Sections */
+/* ===== SECTIONS ===== */
 .section {
   background: var(--card-bg);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  border: 1px solid var(--border-light);
   margin-bottom: 24px;
   overflow: hidden;
+  transition: box-shadow var(--transition);
 }
+.section:hover { box-shadow: var(--shadow-md); }
 .section-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background: #fafbfc;
 }
-.section-header h3 { font-size: 16px; font-weight: 600; }
-.section-body { padding: 20px; }
+.section-header h3 { font-size: 16px; font-weight: 700; color: var(--text); }
+.section-body { padding: 24px; }
 
-/* Chart container */
+/* ===== CHART ===== */
 .chart-wrap {
   position: relative;
-  height: 300px;
+  height: 320px;
+  background: linear-gradient(180deg, #fafbff 0%, #f8fafc 100%);
+  border-radius: var(--radius-sm);
+  padding: 12px;
 }
 .chart-wrap canvas { width: 100% !important; }
 
-/* Tables */
-.table-wrap { overflow-x: auto; }
+/* ===== TABLES ===== */
+.table-wrap { overflow-x: auto; border-radius: var(--radius-sm); }
 table {
   width: 100%;
   border-collapse: collapse;
@@ -175,65 +260,77 @@ table {
 }
 th {
   background: #f8fafc;
-  padding: 10px 12px;
+  padding: 12px 14px;
   text-align: left;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-secondary);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   border-bottom: 2px solid var(--border);
   white-space: nowrap;
 }
 td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-light);
   white-space: nowrap;
+  transition: background var(--transition);
 }
 tr:hover td { background: #f8fafc; }
 td .grade {
   display: inline-block;
-  padding: 2px 10px;
-  border-radius: 12px;
+  padding: 3px 12px;
+  border-radius: var(--radius-pill);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
 }
-.grade-excellent { background: #d1fae5; color: #065f46; }
+.grade-excellent { background: var(--success-light); color: #065f46; }
 .grade-good { background: #dbeafe; color: #1e40af; }
-.grade-normal { background: #fef3c7; color: #92400e; }
-.grade-poor { background: #fee2e2; color: #991b1b; }
+.grade-normal { background: var(--warning-light); color: #92400e; }
+.grade-poor { background: var(--danger-light); color: #991b1b; }
 .grade-bad { background: #fecaca; color: #7f1d1d; }
 
-/* Buttons */
+/* ===== BUTTONS ===== */
 .btn {
-  padding: 8px 20px;
-  border-radius: 6px;
+  padding: 9px 22px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: #fff;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s;
+  font-weight: 600;
+  transition: all var(--transition);
+  color: var(--text);
+  letter-spacing: 0.2px;
 }
-.btn:hover { background: #f8fafc; }
+.btn:hover { background: #f9fafb; border-color: #d1d5db; transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.btn:active { transform: translateY(0); }
 .btn-primary {
-  background: var(--primary);
+  background: var(--primary-gradient);
   color: #fff;
-  border-color: var(--primary);
+  border: none;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.3);
 }
-.btn-primary:hover { background: #2563eb; }
-.btn-sm { padding: 4px 12px; font-size: 12px; }
-.btn-accent { background: #7c3aed; color: #fff; }
-.btn-accent:hover { background: #6d28d9; }
+.btn-primary:hover { background: var(--primary-gradient-hover); box-shadow: 0 4px 14px rgba(99,102,241,0.4); transform: translateY(-1px); }
+.btn-sm { padding: 5px 14px; font-size: 12px; border-radius: var(--radius-pill); }
+.btn-accent { background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff; border: none; box-shadow: 0 2px 8px rgba(124,58,237,0.3); }
+.btn-accent:hover { background: linear-gradient(135deg, #6d28d9, #9333ea); box-shadow: 0 4px 14px rgba(124,58,237,0.4); transform: translateY(-1px); }
+.btn-text { border: none; background: none; color: var(--primary); font-weight: 600; padding: 5px 10px; border-radius: var(--radius-pill); transition: var(--transition); }
+.btn-text:hover { background: var(--primary-light); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
 
-/* 坐席概括总结 */
-.agent-summary-text { font-size: 15px; line-height: 1.8; color: var(--text-primary); background: #f8f5ff; border-left: 4px solid #7c3aed; padding: 14px 18px; border-radius: 8px; margin-bottom: 16px; }
-.agent-summary-flags { margin-bottom: 16px; }
-.agent-summary-flags .flag { display: inline-block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 20px; font-size: 13px; margin: 0 6px 6px 0; }
+/* ===== 坐席概括总结 ===== */
+.agent-summary-text { font-size: 15px; line-height: 1.85; color: var(--text); background: linear-gradient(135deg, #faf5ff, #f5f3ff); border-left: 4px solid #7c3aed; padding: 16px 20px; border-radius: var(--radius-sm); margin-bottom: 18px; }
+.agent-summary-flags { margin-bottom: 18px; }
+.agent-summary-flags .flag { display: inline-block; background: var(--danger-light); color: #991b1b; border: 1px solid #fecaca; padding: 5px 14px; border-radius: var(--radius-pill); font-size: 13px; margin: 0 6px 6px 0; font-weight: 500; }
 
 /* 概括总结 - 段落卡片 */
-.summary-section-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; box-shadow: var(--shadow); }
-.summary-section-card .sc-header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--text-secondary); background: var(--bg); border-bottom: 1px solid var(--border); }
-.summary-section-card .sc-header .sc-icon { font-size: 16px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }
-.summary-section-card .sc-body { padding: 12px 16px; font-size: 14px; line-height: 1.75; color: var(--text); }
-.summary-section-card .sc-body strong { color: var(--primary); }
+.summary-section-card { background: var(--card-bg); border: 1px solid var(--border-light); border-radius: var(--radius-sm); margin-bottom: 12px; overflow: hidden; box-shadow: var(--shadow-sm); transition: all var(--transition); }
+.summary-section-card:hover { box-shadow: var(--shadow-md); border-color: transparent; }
+.summary-section-card .sc-header { display: flex; align-items: center; gap: 10px; padding: 12px 18px; font-size: 13px; font-weight: 700; color: var(--text-secondary); background: #fafbfc; border-bottom: 1px solid var(--border-light); letter-spacing: 0.3px; }
+.summary-section-card .sc-header .sc-icon { font-size: 15px; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-xs); flex-shrink: 0; }
+.summary-section-card .sc-body { padding: 16px 18px; font-size: 14px; line-height: 1.8; color: var(--text); }
+.summary-section-card .sc-body strong { color: var(--primary); font-weight: 700; }
 
 /* 概览 */
 .sc-icon-overview { background: #ede9fe; color: #7c3aed; }
@@ -249,75 +346,94 @@ td .grade {
 .sc-icon-deep { background: #fce7f3; color: #be185d; }
 
 /* 概括总结 - 统计卡片分组 */
-.summary-stats-section { margin-bottom: 10px; }
-.summary-stats-section .ss-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); padding: 0 2px 6px; }
-.summary-divider { height: 1px; background: var(--border); margin: 6px 0 14px; }
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
-.stat-item { background: #f9fafb; border-radius: 8px; padding: 14px 16px; text-align: center; }
-.stat-item .stat-value { font-size: 24px; font-weight: 700; color: var(--text-primary); }
-.stat-item .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.summary-stats-section { margin-bottom: 12px; }
+.summary-stats-section .ss-title { font-size: 12px; font-weight: 700; letter-spacing: 1px; color: var(--text-secondary); padding: 0 2px 8px; }
+.summary-divider { height: 1px; background: var(--border-light); margin: 8px 0 16px; }
+.summary-stats-section .stats-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.stat-item { background: linear-gradient(135deg, #f9fafb, #f3f4f6); border-radius: var(--radius-sm); padding: 16px 16px; text-align: center; border: 1px solid var(--border-light); transition: all var(--transition); }
+.stat-item:hover { box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.stat-item .stat-value { font-size: 26px; font-weight: 800; color: var(--text); letter-spacing: -0.5px; }
+.stat-item .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-weight: 500; }
 .stat-item.stat-good .stat-value { color: #059669; }
 .stat-item.stat-warn .stat-value { color: #d97706; }
 .stat-item.stat-bad .stat-value { color: #dc2626; }
 .topic-bars { margin-bottom: 16px; }
-.topic-bar { display: flex; align-items: center; margin-bottom: 6px; font-size: 13px; }
-.topic-bar .topic-name { width: 100px; text-align: right; margin-right: 10px; color: var(--text-secondary); flex-shrink: 0; }
-.topic-bar .topic-fill { height: 20px; background: linear-gradient(90deg, #7c3aed, #a78bfa); border-radius: 4px; min-width: 4px; transition: width 0.5s; }
-.topic-bar .topic-count { margin-left: 8px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
-.btn-text { border: none; background: none; color: var(--primary); padding: 4px 8px; }
+.topic-bar { display: flex; align-items: center; margin-bottom: 8px; font-size: 13px; }
+.topic-bar .topic-name { width: 110px; text-align: right; margin-right: 12px; color: var(--text-secondary); flex-shrink: 0; font-weight: 500; font-size: 12px; }
+.topic-bar .topic-fill { height: 22px; background: var(--primary-gradient); border-radius: var(--radius-pill); min-width: 4px; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+.topic-bar .topic-count { margin-left: 10px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; font-weight: 600; }
+.btn-text { border: none; background: none; color: var(--primary); padding: 5px 10px; font-weight: 600; }
 .btn-text:hover { background: var(--primary-light); }
 
-/* Modal */
+/* ===== MODAL ===== */
 .modal-overlay {
   display: none;
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(15,23,42,0.6);
+  backdrop-filter: blur(4px);
   z-index: 1000;
   align-items: center;
   justify-content: center;
+  animation: fadeIn 0.2s ease;
 }
 .modal-overlay.show { display: flex; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .modal {
   background: #fff;
   border-radius: var(--radius);
   width: 90%;
-  max-width: 900px;
+  max-width: 920px;
   max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-light);
+  animation: modalSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes modalSlideIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .modal-header {
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: sticky;
   top: 0;
-  background: #fff;
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(10px);
+  z-index: 2;
 }
-.modal-header h3 { font-size: 16px; }
+.modal-header h3 { font-size: 17px; font-weight: 700; }
 .modal-close {
   border: none;
-  background: none;
-  font-size: 24px;
+  background: #f3f4f6;
+  font-size: 20px;
   cursor: pointer;
   color: var(--text-secondary);
-  line-height: 1;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--transition);
 }
+.modal-close:hover { background: var(--danger-light); color: var(--danger); }
 .modal-body { padding: 24px; }
 
-/* Chat bubble */
+/* ===== CHAT BUBBLE ===== */
 .chat-container {
   max-height: 500px;
   overflow-y: auto;
-  padding: 16px;
-  background: #f5f7fa;
-  border-radius: 8px;
+  padding: 20px;
+  background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
 }
+.chat-container::-webkit-scrollbar { width: 6px; }
+.chat-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 .chat-msg {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   display: flex;
   flex-direction: column;
 }
@@ -325,197 +441,218 @@ td .grade {
 .chat-msg.staff { align-items: flex-end; }
 .chat-bubble {
   max-width: 75%;
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.5;
+  padding: 10px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.6;
   word-break: break-word;
+  box-shadow: var(--shadow-sm);
 }
 .chat-msg.visitor .chat-bubble {
   background: #fff;
-  border: 1px solid #e5e7eb;
-  border-top-left-radius: 4px;
+  border: 1px solid #e2e8f0;
+  border-top-left-radius: 6px;
 }
 .chat-msg.staff .chat-bubble {
-  background: var(--primary);
+  background: var(--primary-gradient);
   color: #fff;
-  border-top-right-radius: 4px;
+  border-top-right-radius: 6px;
 }
 .chat-msg.system .chat-bubble {
-  background: #f3f4f6;
-  color: #9ca3af;
+  background: #f1f5f9;
+  color: #94a3b8;
   font-size: 12px;
   text-align: center;
   max-width: 90%;
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
 }
 .chat-msg.system { align-items: center; }
 .chat-meta {
   font-size: 11px;
-  color: #9ca3af;
-  margin-top: 2px;
+  color: #94a3b8;
+  margin-top: 4px;
+  padding: 0 4px;
 }
 
-/* Summary card */
+/* ===== SUMMARY CARD ===== */
 .summary-card {
-  background: #f0f9ff;
+  background: linear-gradient(135deg, #eff6ff, #f0f9ff);
   border: 1px solid #bae6fd;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
+  border-radius: var(--radius-sm);
+  padding: 18px;
+  margin-bottom: 18px;
 }
-.summary-card h4 { font-size: 14px; color: #0369a1; margin-bottom: 8px; }
-.summary-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.summary-card h4 { font-size: 15px; color: #0369a1; margin-bottom: 10px; font-weight: 700; }
+.summary-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
 .tag {
   display: inline-block;
-  padding: 3px 10px;
-  border-radius: 14px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
   font-size: 12px;
-  background: #e0f2fe;
-  color: #0369a1;
+  font-weight: 600;
+  background: #dbeafe;
+  color: #1e40af;
 }
 .feature-item {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
-  margin: 4px 0;
-  padding-left: 16px;
+  margin: 6px 0;
+  padding-left: 18px;
   position: relative;
+  line-height: 1.6;
 }
 .feature-item::before {
   content: '';
   position: absolute;
   left: 4px;
-  top: 8px;
-  width: 5px;
-  height: 5px;
+  top: 9px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--info);
+  background: var(--primary);
 }
 
-/* Report */
-.report-section { margin-bottom: 20px; }
+/* ===== REPORT ===== */
+.report-section { margin-bottom: 22px; }
 .report-section h4 {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
   border-bottom: 2px solid var(--primary-light);
 }
-.report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 768px) { .report-grid { grid-template-columns: 1fr; } }
 .report-card {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 18px;
+  background: var(--card-bg);
+  transition: all var(--transition);
 }
+.report-card:hover { box-shadow: var(--shadow-md); border-color: transparent; }
 .report-card .agent-name {
-  font-weight: 600;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  font-size: 15px;
 }
-.strength { color: var(--success); font-size: 13px; margin: 4px 0; }
-.weakness { color: var(--danger); font-size: 13px; margin: 4px 0; }
+.strength { color: var(--success); font-size: 13px; margin: 5px 0; padding-left: 4px; }
+.weakness { color: var(--danger); font-size: 13px; margin: 5px 0; padding-left: 4px; }
 .suggestion-box {
-  background: #fefce8;
+  background: var(--warning-light);
   border: 1px solid #fde68a;
-  border-radius: 6px;
-  padding: 10px 14px;
-  margin-top: 10px;
+  border-radius: var(--radius-xs);
+  padding: 12px 16px;
+  margin-top: 12px;
   font-size: 13px;
   color: #92400e;
+  line-height: 1.7;
 }
 
-/* Settings form */
-.form-group { margin-bottom: 16px; }
+/* ===== FORMS ===== */
+.form-group { margin-bottom: 18px; }
 .form-group label {
   display: block;
   font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 6px;
+  font-weight: 700;
+  margin-bottom: 8px;
   color: var(--text);
+  letter-spacing: 0.2px;
 }
-.form-group input {
+.form-group input, .form-group select {
   width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 11px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs);
   font-size: 14px;
-  transition: border-color 0.2s;
+  transition: all var(--transition);
+  background: #fafbfc;
 }
-.form-group input:focus {
+.form-group input:focus, .form-group select:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-light);
+  background: #fff;
 }
-.form-group .hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.form-group .hint { font-size: 12px; color: var(--text-muted); margin-top: 5px; }
 
-/* Status indicators */
+/* ===== STATUS ===== */
 .status-dot {
   display: inline-block;
   width: 8px; height: 8px;
   border-radius: 50%;
   margin-right: 6px;
+  vertical-align: middle;
 }
-.status-dot.configured { background: var(--success); }
-.status-dot.unconfigured { background: var(--warning); }
+.status-dot.configured { background: var(--success); box-shadow: 0 0 6px rgba(16,185,129,0.4); }
+.status-dot.unconfigured { background: var(--warning); animation: pulse 2s infinite; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 
-/* Loading */
+/* ===== LOADING ===== */
 .loading {
   display: none;
   text-align: center;
-  padding: 40px;
+  padding: 60px 20px;
   color: var(--text-secondary);
 }
 .loading.show { display: block; }
 .spinner {
   display: inline-block;
-  width: 32px; height: 32px;
-  border: 3px solid var(--border);
+  width: 36px; height: 36px;
+  border: 3px solid var(--border-light);
   border-top-color: var(--primary);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 12px;
+  animation: spin 0.7s linear infinite;
+  margin-bottom: 14px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Empty state */
+/* ===== EMPTY STATE ===== */
 .empty-state {
   text-align: center;
-  padding: 60px 20px;
+  padding: 70px 20px;
   color: var(--text-secondary);
 }
-.empty-state .icon { font-size: 48px; margin-bottom: 16px; }
-.empty-state h3 { font-size: 18px; margin-bottom: 8px; color: var(--text); }
-.empty-state p { font-size: 14px; max-width: 400px; margin: 0 auto; }
+.empty-state .icon { font-size: 56px; margin-bottom: 18px; opacity: 0.8; }
+.empty-state h3 { font-size: 18px; margin-bottom: 8px; color: var(--text); font-weight: 700; }
+.empty-state p { font-size: 14px; max-width: 420px; margin: 0 auto; }
 
-/* Toast */
+/* ===== TOAST ===== */
 .toast {
   position: fixed;
-  top: 80px;
+  top: 84px;
   left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 24px;
-  border-radius: 8px;
+  transform: translateX(-50%) translateY(-12px);
+  padding: 14px 28px;
+  border-radius: var(--radius-pill);
   color: #fff;
   font-size: 14px;
+  font-weight: 600;
   z-index: 2000;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  animation: fadeInOut 3s ease forwards;
+  box-shadow: var(--shadow-lg);
+  animation: toastIn 3.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  letter-spacing: 0.2px;
 }
 .toast.success { background: var(--success); }
 .toast.error { background: var(--danger); }
-@keyframes fadeInOut {
-  0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-  10% { opacity: 1; transform: translateX(-50%) translateY(0); }
-  90% { opacity: 1; }
+@keyframes toastIn {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-16px); }
+  12% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  88% { opacity: 1; }
   100% { opacity: 0; }
 }
 
-/* Responsive */
+/* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
   .header { padding: 0 16px; }
-  .nav { padding: 0 12px; overflow-x: auto; }
+  .nav { padding: 4px 12px; overflow-x: auto; }
   .main { padding: 16px; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
@@ -523,7 +660,10 @@ td .grade {
 </head>
 <body>
 
-<div id="static-mode-banner">⚠️ 静态模式：仅展示已缓存的会话记录，统计功能需运行本地 Flask（端口5890）</div>
+<!-- Static Mode Banner -->
+<div class="static-mode-banner" id="static-mode-banner">
+  📦 当前为静态缓存模式 — 仅可查看已缓存的会话数据。完整功能请通过 Flask 后端访问。
+</div>
 
 <!-- Header -->
 <div class="header">
@@ -622,10 +762,10 @@ td .grade {
           <span id="cache-status-badge" style="font-size:12px;color:var(--text-secondary)"></span>
         </div>
         <div class="section-body">
-          <div id="cache-status-bar" style="display:none;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 16px;margin-bottom:12px;font-size:13px;color:#92400e">
+          <div id="cache-status-bar" style="display:none;background:#fff7ed;border:1px solid #fed7aa;border-radius:var(--radius-xs);padding:12px 16px;margin-bottom:14px;font-size:13px;color:#92400e;line-height:1.7">
             ⚠️ <span id="cache-status-msg"></span>
           </div>
-          <div id="api-permission-warning" style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px 18px;margin-bottom:16px;font-size:13px;color:#991b1b;display:none">
+          <div id="api-permission-warning" style="background:var(--danger-light);border:1px solid #fecaca;border-radius:var(--radius-xs);padding:14px 18px;margin-bottom:16px;font-size:13px;color:#991b1b;display:none;line-height:1.7">
             <strong>⚠️ 会话导出接口不可用</strong><br>
             当前企业账号的七鱼API权限仅包含「数据统计」类接口（总览/坐席绩效/满意度等），不包含「会话导出」类接口（批量导出/单条详情）。<br>
             如需查询具体会话内容，请：<br>
@@ -634,7 +774,7 @@ td .grade {
           </div>
           <div class="form-group">
             <label>选择坐席（需要先缓存会话数据）</label>
-            <select id="session-agent-select" style="padding:8px 12px;border-radius:6px;border:1px solid var(--border);font-size:14px;min-width:200px">
+            <select id="session-agent-select" style="min-width:220px">
               <option value="">-- 请先加载坐席数据 --</option>
             </select>
             <button class="btn btn-primary" onclick="loadAgentSessions()" style="margin-left:12px">查询会话</button>
@@ -645,10 +785,10 @@ td .grade {
               💡 会话数据需凌晨2:00-6:00自动缓存（需企业开通批量导出权限）
             </span>
           </div>
-          <div style="margin-top:16px;padding:12px 16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px">
-            <strong style="font-size:13px;color:#0369a1">🔍 直接查询单条会话</strong>
+          <div style="margin-top:18px;padding:14px 18px;background:linear-gradient(135deg,#eff6ff,#f0f9ff);border:1px solid #bae6fd;border-radius:var(--radius-xs)">
+            <strong style="font-size:14px;color:#0369a1">🔍 直接查询单条会话</strong>
             <div style="margin-top:8px">
-              <input type="number" id="session-id-input" placeholder="输入会话ID" style="padding:8px 12px;border-radius:6px;border:1px solid var(--border);font-size:14px;width:200px">
+              <input type="number" id="session-id-input" placeholder="输入会话ID" style="width:220px">
               <button class="btn btn-primary" onclick="loadSessionById()" style="margin-left:8px">查看会话</button>
               <span style="font-size:12px;color:var(--text-secondary);margin-left:8px">需要企业开通"会话导出"权限</span>
             </div>
@@ -1459,16 +1599,15 @@ function fillAgentSelect(agents) {
 // ==================== 3. 会话分析 ====================
 
 async function loadSessionsPage() {
+  // 静态模式：切换到会话页面，只显示缓存状态
   if (isStaticMode) {
-    // 静态模式：使用 sessionStorage 缓存的坐席数据
-    const stored = sessionStorage.getItem('cachedAgents');
-    if (stored) {
-      cachedAgents = JSON.parse(stored);
-      fillAgentSelect(cachedAgents);
-    }
-    checkCacheStatus();
-    hideLoading('sessions');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const sessionNav = document.querySelector('[data-page="sessions"]');
+    if (sessionNav) sessionNav.classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-sessions').classList.add('active');
     document.getElementById('sessions-content').style.display = 'block';
+    checkCacheStatus();
     return;
   }
 
@@ -1481,8 +1620,6 @@ async function loadSessionsPage() {
     hideLoading('sessions');
     if (resp.code === 200) {
       cachedAgents = resp.data.agents || [];
-      // 缓存到 sessionStorage 供静态模式使用
-      sessionStorage.setItem('cachedAgents', JSON.stringify(cachedAgents));
       fillAgentSelect(cachedAgents);
     } else {
       showToast('加载坐席列表失败: ' + (resp.message || ''), 'error');
@@ -1496,13 +1633,26 @@ async function loadSessionsPage() {
 }
 
 async function checkCacheStatus() {
+  // 静态模式：检查本地 JSON 缓存文件是否存在
   if (isStaticMode) {
     const badge = document.getElementById('cache-status-badge');
-    const bar = document.getElementById('cache-status-bar');
-    badge.textContent = '📦 静态模式';
-    bar.style.display = 'block';
-    const msg = document.getElementById('cache-status-msg');
-    msg.innerHTML = 'GitHub Pages 静态模式：请通过下方「输入会话ID」查看（需本地 Flask 支持），或查看 data/sessions-*.json 文件。';
+    if (!badge) return;
+    try {
+      const resp = await fetch(`data/latest.json`);
+      if (resp.ok) {
+        const latest = await resp.json();
+        const dates = latest.sessionDates || [];
+        if (dates.includes(currentDate)) {
+          badge.textContent = `✅ 缓存就绪`;
+        } else {
+          badge.textContent = '📦 无 ' + currentDate + ' 缓存';
+        }
+      } else {
+        badge.textContent = '📦 无缓存数据';
+      }
+    } catch (e) {
+      badge.textContent = '⚠️ 无法读取缓存';
+    }
     return;
   }
 
@@ -1551,35 +1701,24 @@ async function loadAgentSessions() {
   const agentId = document.getElementById('session-agent-select').value;
   if (!agentId) { showToast('请先选择坐席', 'error'); return; }
 
-  if (isStaticMode) {
-    // 静态模式：从 data/ 目录预加载的 JSON 读取
-    showLoading('sessions');
-    try {
-      const latestResp = await fetch('data/latest.json');
-      if (!latestResp.ok) throw new Error('latest.json not found');
-      const latest = await latestResp.json();
-      const dates = latest.sessionDates || [];
-      if (dates.length === 0) throw new Error('no session dates');
+  showLoading('sessions');
 
-      const latestDate = dates[dates.length - 1];
-      const dataResp = await fetch(`data/sessions-${latestDate}.json`);
-      if (!dataResp.ok) throw new Error('session file not found');
-      const sessions = await dataResp.json();
-      const agentSessions = Array.isArray(sessions)
-        ? sessions.filter(s => String(s.staffId) === String(agentId))
-        : [];
+  // 静态模式：从缓存的 JSON 文件读取
+  if (isStaticMode) {
+    const resp = await fetch(`data/sessions-${currentDate}.json`);
+    if (!resp.ok) {
       hideLoading('sessions');
-      renderSessionsList(agentSessions, `静态缓存 · ${latestDate}`);
-      return;
-    } catch (e) {
-      hideLoading('sessions');
-      showToast('静态模式：未找到会话缓存数据（data/sessions-*.json）', 'error');
+      showToast('缓存数据不存在: ' + currentDate, 'error');
       document.getElementById('sessions-list-section').style.display = 'none';
       return;
     }
+    const allData = await resp.json();
+    const sessions = (allData.sessions || []).filter(s => s.staffId == agentId);
+    renderSessionsList(sessions, `静态缓存 (${currentDate})`);
+    hideLoading('sessions');
+    return;
   }
 
-  showLoading('sessions');
   // 优先使用缓存接口
   const resp = await apiGet(`/api/sessions/cached?date=${currentDate}&staffId=${agentId}`);
   hideLoading('sessions');
@@ -1915,12 +2054,13 @@ async function openSessionDetail(sessionId) {
   document.getElementById('session-modal-body').innerHTML = `
     <div class="loading show"><div class="spinner"></div><div>加载会话内容...</div></div>`;
 
+  // 静态模式下不支持会话详情（需要实时API）
   if (isStaticMode) {
     document.getElementById('session-modal-body').innerHTML = `
       <div class="empty-state">
-        <div class="icon">📡</div>
+        <div class="icon">📦</div>
         <h3>静态模式不支持会话详情</h3>
-        <p>GitHub Pages 无后端 API，会话详情需在本地 Flask 环境下查看（端口5890）</p>
+        <p>会话详情需要实时的七鱼 API 接口。请通过 Flask 后端 localhost:5890 访问以查看详情。</p>
       </div>`;
     return;
   }
@@ -2139,24 +2279,16 @@ function viewAgentSessions(agentId) {
 // ==================== 初始化 ====================
 
 async function init() {
-  // 静态模式检测：GitHub Pages 无 Flask 后端
-  try {
-    const healthResp = await fetch(API_BASE + '/api/config', { signal: AbortSignal.timeout(2000) });
-    isStaticMode = !healthResp.ok && healthResp.status !== 401;
-  } catch (e) {
+  // 检测是否为静态模式（GitHub Pages 或直接打开 HTML 文件）
+  if (window.location.protocol === 'file:' || !window.location.host.includes('localhost')) {
     isStaticMode = true;
+    document.body.classList.add('static-mode');
+    document.getElementById('static-mode-banner').style.display = 'block';
   }
 
   if (isStaticMode) {
-    document.getElementById('static-mode-banner').classList.add('show');
-    // 静态模式下直接跳到会话分析页
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    const sessionNav = document.querySelector('[data-page="sessions"]');
-    if (sessionNav) {
-      sessionNav.classList.add('active');
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.getElementById('page-sessions').classList.add('active');
-    }
+    // 静态模式：仅加载会话页面
+    document.getElementById('statusBadge').innerHTML = '<span class="status-dot unconfigured"></span>静态模式';
     loadSessionsPage();
     return;
   }
